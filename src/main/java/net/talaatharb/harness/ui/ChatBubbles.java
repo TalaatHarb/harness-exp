@@ -67,6 +67,16 @@ public final class ChatBubbles {
         return button;
     }
 
+    /** Reruns an assistant turn; the controller ignores clicks while another run is active. */
+    public static Button regenerateButton(Runnable action) {
+        Button button = new Button("↻ Regenerate");
+        button.getStyleClass().addAll("copy-button", "regenerate-button");
+        button.setFocusTraversable(false);
+        button.setTooltip(new Tooltip("Run this request again and replace the response (later messages are discarded)"));
+        button.setOnAction(e -> action.run());
+        return button;
+    }
+
     static HBox actionBar(Pos alignment, Node... actions) {
         HBox bar = new HBox(4, actions);
         bar.setAlignment(alignment);

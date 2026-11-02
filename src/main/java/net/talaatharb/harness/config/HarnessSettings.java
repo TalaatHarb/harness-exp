@@ -1,9 +1,9 @@
 package net.talaatharb.harness.config;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 import net.talaatharb.harness.agent.AgentLoopSettings;
 import net.talaatharb.harness.approval.ApprovalSettings;
@@ -23,11 +23,17 @@ import net.talaatharb.harness.tools.ToolSettings;
 public class HarnessSettings {
     public ModelSettings model = new ModelSettings();
     public SystemPromptSettings systemPrompt = new SystemPromptSettings();
-    public List<SkillDefinition> skills = new ArrayList<>(SkillDefinition.defaults());
+    /**
+     * Legacy: skills now live in the skills folder ({@link net.talaatharb.harness.skills.SkillRepository}). Only read
+     * to migrate old settings files, then cleared, so it is normally absent from settings.json.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public List<SkillDefinition> skills;
     public ContextSettings context = new ContextSettings();
     public ToolSettings tools = new ToolSettings();
     public AgentLoopSettings agentLoop = new AgentLoopSettings();
     public GuardrailSettings guardrails = new GuardrailSettings();
     public ApprovalSettings approval = new ApprovalSettings();
     public ReplySettings reply = new ReplySettings();
+    public StorageSettings storage = new StorageSettings();
 }

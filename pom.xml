@@ -16,6 +16,7 @@
         <javafx.version>21.0.5</javafx.version>
         <jackson.version>2.21.0</jackson.version>
         <ollama4j.version>1.1.7</ollama4j.version>
+        <mapdb.version>3.1.0</mapdb.version>
     </properties>
 
     <dependencies>
@@ -59,6 +60,13 @@
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
             <version>${jackson.version}</version>
+        </dependency>
+
+        <!-- Conversation history -->
+        <dependency>
+            <groupId>org.mapdb</groupId>
+            <artifactId>mapdb</artifactId>
+            <version>${mapdb.version}</version>
         </dependency>
 
         <dependency>

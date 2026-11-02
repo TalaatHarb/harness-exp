@@ -1,6 +1,10 @@
 package net.talaatharb.harness.ui;
 
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -12,14 +16,29 @@ import org.slf4j.LoggerFactory;
 import com.google.inject.Inject;
 
 import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
 import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
 import javafx.fxml.FXML;
+import javafx.scene.Node;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
+import javafx.scene.control.ListView;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
+import javafx.scene.control.TextFormatter;
+import javafx.scene.control.TextInputDialog;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.input.KeyCode;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.VBox;
 import net.talaatharb.harness.agent.AgentListener;
 import net.talaatharb.harness.agent.AgentLoop;
@@ -27,23 +46,41 @@ import net.talaatharb.harness.agent.AgentRunResult;
 import net.talaatharb.harness.agent.Conversation;
 import net.talaatharb.harness.config.HarnessSettings;
 import net.talaatharb.harness.config.SettingsStore;
+import net.talaatharb.harness.history.ConversationRecord;
+import net.talaatharb.harness.history.ConversationStore;
+import net.talaatharb.harness.history.ConversationSummary;
+import net.talaatharb.harness.history.TurnRecord;
+import net.talaatharb.harness.llm.ChatMessage;
 import net.talaatharb.harness.llm.ModelProviderRegistry;
 import net.talaatharb.harness.tools.ToolCall;
 import net.talaatharb.harness.tools.ToolResult;
 
-/** ChatGPT-like main window: a model picker, the conversation and a composer. Everything else lives in settings. */
+/**
+ * ChatGPT-like main window: a model picker, the conversation and a composer, plus a collapsible history sidebar.
+ * Everything else lives in settings.
+ */
 public class MainController {
     private static final Logger LOG = LoggerFactory.getLogger(MainController.class);
+    private static final DateTimeFormatter HISTORY_TIME = DateTimeFormatter.ofPattern("MMM d, HH:mm", Locale.ROOT)
+            .withZone(ZoneId.systemDefault());
+
     private final AgentLoop agentLoop;
     private final SettingsStore store;
     private final ModelProviderRegistry providers;
     private final SettingsWindow settingsWindow;
-    private final Conversation conversation = new Conversation();
+    private final ConversationStore history;
     private final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "agent-loop");
         t.setDaemon(true);
         return t;
     });
+    private final ObservableList<ConversationSummary> historyItems = FXCollections.observableArrayList();
+    private final FilteredList<ConversationSummary> filteredHistory = new FilteredList<>(historyItems);
+
+    /** The open chat. Replaced (not cleared) on switch so a still-finishing run keeps writing to its own chat. */
+    private ConversationRecord record = ConversationRecord.create();
+    private Conversation conversation = new Conversation();
+    private final List<Exchange> exchanges = new ArrayList<>();
 
     private Future<?> running;
     private AtomicBoolean cancelFlag;
@@ -56,14 +93,34 @@ public class MainController {
     @FXML private TextArea inputArea;
     @FXML private Button sendButton;
     @FXML private Button stopButton;
+    @FXML private ToggleButton historyToggle;
+    @FXML private VBox historyPane;
+    @FXML private TextField historySearch;
+    @FXML private ListView<ConversationSummary> historyList;
+    @FXML private Button deleteConversationButton;
+    @FXML private Button renameConversationButton;
+    @FXML private Label historyStatus;
+
+    /** UI + model state of one request/response pair. */
+    private static final class Exchange {
+        final TurnRecord turn;
+        final Node userNode;
+        AssistantTurnView view;
+
+        Exchange(TurnRecord turn, Node userNode) {
+            this.turn = turn;
+            this.userNode = userNode;
+        }
+    }
 
     @Inject
     public MainController(AgentLoop agentLoop, SettingsStore store, ModelProviderRegistry providers,
-            SettingsWindow settingsWindow) {
+            SettingsWindow settingsWindow, ConversationStore history) {
         this.agentLoop = agentLoop;
         this.store = store;
         this.providers = providers;
         this.settingsWindow = settingsWindow;
+        this.history = history;
     }
 
     @FXML
@@ -83,7 +140,88 @@ public class MainController {
                 modelCombo.setValue(model);
             }
         }));
+        initHistory();
         onRefreshModels();
+    }
+
+    private void initHistory() {
+        historyPane.managedProperty().bind(historyPane.visibleProperty());
+        historyPane.visibleProperty().bind(historyToggle.selectedProperty());
+        historyList.setItems(filteredHistory);
+        historyList.setPlaceholder(new Label("No saved conversations"));
+        historyList.setCellFactory(list -> {
+            ListCell<ConversationSummary> cell = new ListCell<>() {
+                @Override
+                protected void updateItem(ConversationSummary item, boolean empty) {
+                    super.updateItem(item, empty);
+                    if (empty || item == null) {
+                        setText(null);
+                        setGraphic(null);
+                        return;
+                    }
+                    Label title = new Label(item.title());
+                    title.getStyleClass().add("history-title");
+                    Label meta = new Label((item.updatedAt() == null ? "" : HISTORY_TIME.format(item.updatedAt()))
+                            + " · " + item.turns() + (item.turns() == 1 ? " message" : " messages"));
+                    meta.getStyleClass().add("history-meta");
+                    setText(null);
+                    setGraphic(new VBox(1, title, meta));
+                }
+            };
+            MenuItem rename = new MenuItem("Rename…");
+            rename.setOnAction(e -> onRenameConversation());
+            MenuItem delete = new MenuItem("Delete…");
+            delete.setOnAction(e -> onDeleteConversation());
+            cell.emptyProperty().addListener((obs, wasEmpty, isEmpty) ->
+                    cell.setContextMenu(isEmpty ? null : new ContextMenu(rename, delete)));
+            cell.setOnMouseClicked(e -> {
+                if (!cell.isEmpty() && e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 2) {
+                    onRenameConversation();
+                }
+            });
+            return cell;
+        });
+        historyList.setOnKeyPressed(e -> {
+            if (e.getCode() == KeyCode.F2) {
+                e.consume();
+                onRenameConversation();
+            }
+        });
+        historyList.getSelectionModel().selectedItemProperty().addListener((obs, o, selected) -> {
+            deleteConversationButton.setDisable(selected == null);
+            renameConversationButton.setDisable(selected == null);
+            if (selected != null && !selected.id().equals(record.id)) {
+                openConversation(selected.id());
+            }
+        });
+        historySearch.textProperty().addListener((obs, o, query) -> {
+            String q = query == null ? "" : query.strip().toLowerCase(Locale.ROOT);
+            filteredHistory.setPredicate(s -> q.isEmpty() || s.title().toLowerCase(Locale.ROOT).contains(q));
+        });
+        deleteConversationButton.setDisable(true);
+        renameConversationButton.setDisable(true);
+        historyStatus.setVisible(!history.persistent());
+        historyStatus.setManaged(!history.persistent());
+        refreshHistory();
+    }
+
+    private void refreshHistory() {
+        try {
+            historyItems.setAll(history.list());
+        } catch (RuntimeException e) {
+            LOG.error("Could not list conversation history", e);
+        }
+        selectCurrentInHistory();
+    }
+
+    private void selectCurrentInHistory() {
+        for (ConversationSummary item : filteredHistory) {
+            if (item.id().equals(record.id)) {
+                historyList.getSelectionModel().select(item);
+                return;
+            }
+        }
+        historyList.getSelectionModel().clearSelection();
     }
 
     @FXML
@@ -124,13 +262,117 @@ public class MainController {
     @FXML
     private void onNewChat() {
         onStop();
-        conversation.clear();
-        messagesBox.getChildren().setAll(emptyLabel);
+        showConversation(ConversationRecord.create());
     }
 
     @FXML
     private void onOpenSettings() {
         settingsWindow.show(messagesBox.getScene().getWindow());
+    }
+
+    @FXML
+    private void onRenameConversation() {
+        ConversationSummary selected = historyList.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            return;
+        }
+        TextInputDialog dialog = new TextInputDialog(selected.title());
+        dialog.initOwner(messagesBox.getScene().getWindow());
+        dialog.setTitle("Rename conversation");
+        dialog.setHeaderText("New name for \"" + selected.title() + "\"");
+        TextField field = dialog.getEditor();
+        field.setPrefColumnCount(40);
+        field.setTextFormatter(new TextFormatter<String>(change ->
+                change.getControlNewText().length() > ConversationRecord.MAX_CUSTOM_TITLE_CHARS ? null : change));
+        Node ok = dialog.getDialogPane().lookupButton(ButtonType.OK);
+        ok.disableProperty().bind(Bindings.createBooleanBinding(
+                () -> field.getText() == null || field.getText().isBlank(), field.textProperty()));
+        Platform.runLater(field::selectAll);
+        dialog.showAndWait().ifPresent(title -> rename(selected.id(), title));
+    }
+
+    private void rename(String id, String title) {
+        try {
+            String stored = history.rename(id, title);
+            if (id.equals(record.id)) {
+                // Keep the open record in sync, or the next save would restore the old title.
+                record.title = stored;
+            }
+            LOG.info("Renamed conversation {} to '{}'", id, stored);
+        } catch (RuntimeException e) {
+            LOG.error("Could not rename conversation {}", id, e);
+            Alert error = new Alert(Alert.AlertType.ERROR, e.getMessage(), ButtonType.OK);
+            error.initOwner(messagesBox.getScene().getWindow());
+            error.setHeaderText("Rename failed");
+            error.showAndWait();
+        }
+        refreshHistory();
+    }
+
+    @FXML
+    private void onDeleteConversation() {
+        ConversationSummary selected = historyList.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            return;
+        }
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Delete \"" + selected.title() + "\"? This cannot be undone.", ButtonType.OK, ButtonType.CANCEL);
+        confirm.initOwner(messagesBox.getScene().getWindow());
+        confirm.setHeaderText("Delete conversation");
+        if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
+            return;
+        }
+        if (selected.id().equals(record.id)) {
+            onNewChat();
+        }
+        try {
+            history.delete(selected.id());
+        } catch (RuntimeException e) {
+            LOG.error("Could not delete conversation {}", selected.id(), e);
+        }
+        refreshHistory();
+    }
+
+    private void openConversation(String id) {
+        onStop();
+        history.load(id).ifPresentOrElse(this::showConversation, () -> {
+            LOG.warn("Conversation {} could not be loaded", id);
+            refreshHistory();
+        });
+    }
+
+    /** Switches the view to {@code rec}, rebuilding bubbles and tool traces from the stored turns. */
+    private void showConversation(ConversationRecord rec) {
+        record = rec;
+        conversation = new Conversation();
+        conversation.replaceAll(rec.messages);
+        exchanges.clear();
+        messagesBox.getChildren().clear();
+        HarnessSettings settings = store.current();
+        for (int i = 0; i < rec.turns.size(); i++) {
+            TurnRecord turn = rec.turns.get(i);
+            int end = i + 1 < rec.turns.size() ? rec.turns.get(i + 1).messageStart : rec.messages.size();
+            Exchange exchange = addExchange(turn, settings);
+            // messageStart is the user message; replay everything the agent did after it.
+            for (int m = Math.max(0, turn.messageStart + 1); m < Math.min(end, rec.messages.size()); m++) {
+                exchange.view.replay(rec.messages.get(m));
+            }
+            exchange.view.finish(turn.toResult());
+        }
+        if (exchanges.isEmpty()) {
+            messagesBox.getChildren().setAll(emptyLabel);
+        }
+        selectCurrentInHistory();
+        inputArea.requestFocus();
+    }
+
+    private Exchange addExchange(TurnRecord turn, HarnessSettings settings) {
+        messagesBox.getChildren().remove(emptyLabel);
+        Exchange exchange = new Exchange(turn, ChatBubbles.user(turn.userText));
+        exchange.view = new AssistantTurnView(settings.reply, this::send, () -> regenerate(exchange));
+        exchanges.add(exchange);
+        messagesBox.getChildren().addAll(exchange.userNode, exchange.view.root());
+        return exchange;
     }
 
     @FXML
@@ -143,32 +385,79 @@ public class MainController {
         if (text == null || text.isBlank() || isRunning()) {
             return;
         }
-        onModelChosen();
         inputArea.clear();
-        messagesBox.getChildren().remove(emptyLabel);
-        messagesBox.getChildren().add(ChatBubbles.user(text.strip()));
+        start(text.strip());
+    }
 
+    /** Rewinds the chat to just before {@code exchange} and runs the same request again. */
+    private void regenerate(Exchange exchange) {
+        int index = exchanges.indexOf(exchange);
+        if (isRunning() || index < 0) {
+            return;
+        }
+        int nodeIndex = messagesBox.getChildren().indexOf(exchange.userNode);
+        if (nodeIndex >= 0) {
+            messagesBox.getChildren().remove(nodeIndex, messagesBox.getChildren().size());
+        }
+        exchanges.subList(index, exchanges.size()).clear();
+        record.turns.subList(Math.min(index, record.turns.size()), record.turns.size()).clear();
+        conversation.truncate(Math.min(exchange.turn.messageStart, conversation.size()));
+        LOG.info("Regenerating turn {} of conversation {}", index + 1, record.id);
+        start(exchange.turn.userText);
+    }
+
+    private void start(String text) {
+        onModelChosen();
         HarnessSettings settings = store.current();
-        AssistantTurnView turn = new AssistantTurnView(settings.reply, this::send);
-        messagesBox.getChildren().add(turn.root());
+        ConversationRecord runRecord = record;
+        Conversation runConversation = conversation;
+        TurnRecord turn = new TurnRecord(text, runConversation.size());
+        runRecord.turns.add(turn);
+        Exchange exchange = addExchange(turn, settings);
         setRunning(true);
         AtomicBoolean cancel = new AtomicBoolean();
         cancelFlag = cancel;
         running = executor.submit(() -> {
             try {
-                runAgent(text.strip(), turn, cancel);
+                runAgent(text, exchange.view, runConversation, cancel, result -> {
+                    turn.complete(result);
+                    persist(runRecord, runConversation);
+                    if (cancelFlag == cancel) {
+                        setRunning(false);
+                    }
+                });
             } catch (Throwable t) {
                 LOG.error("Agent run crashed", t);
                 Platform.runLater(() -> {
-                    turn.notice("Unexpected error: " + t.getMessage());
-                    setRunning(false);
+                    exchange.view.notice("Unexpected error: " + t.getMessage());
+                    turn.complete(new AgentRunResult(AgentRunResult.Status.ERROR, null, t.getMessage(), 0, 0));
+                    persist(runRecord, runConversation);
+                    if (cancelFlag == cancel) {
+                        setRunning(false);
+                    }
                 });
             }
         });
     }
 
-    private void runAgent(String text, AssistantTurnView turn, AtomicBoolean cancel) {
-        agentLoop.run(text, conversation, new AgentListener() {
+    private void persist(ConversationRecord rec, Conversation transcript) {
+        rec.messages = new ArrayList<>(transcript.snapshot());
+        rec.model = store.current().model.model;
+        if (rec != record) {
+            // A run finishing after the user switched chats: honour any rename made since.
+            history.load(rec.id).ifPresent(saved -> rec.title = saved.title);
+        }
+        try {
+            history.save(rec);
+        } catch (RuntimeException e) {
+            LOG.error("Could not save conversation {}", rec.id, e);
+        }
+        refreshHistory();
+    }
+
+    private void runAgent(String text, AssistantTurnView turn, Conversation transcript, AtomicBoolean cancel,
+            java.util.function.Consumer<AgentRunResult> onDone) {
+        agentLoop.run(text, transcript, new AgentListener() {
             @Override
             public void onToken(String token) {
                 Platform.runLater(() -> turn.appendToken(token));
@@ -203,7 +492,7 @@ public class MainController {
             public void onFinished(AgentRunResult result) {
                 Platform.runLater(() -> {
                     turn.finish(result);
-                    setRunning(false);
+                    onDone.accept(result);
                 });
             }
         }, cancel);

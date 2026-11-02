@@ -30,6 +30,12 @@
             <TableColumn fx:id="toolDescCol" text="Description" prefWidth="360"/>
         </columns>
     </TableView>
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Label text="Agent-created tools:"/>
+        <Button text="View source" onAction="#onViewDynamicSource"/>
+        <Button text="Delete selected" onAction="#onDeleteDynamicTool"/>
+        <Label fx:id="dynamicStatusLabel" wrapText="true" styleClass="section-help" HBox.hgrow="ALWAYS"/>
+    </HBox>
     <Label text="MCP servers" styleClass="section-title"/>
     <Label wrapText="true" styleClass="section-help"
            text="Configure Model Context Protocol servers. Their tools appear above once an McpToolSource client implementation is bound (currently a placeholder)."/>

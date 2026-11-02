@@ -5,14 +5,20 @@ import java.util.List;
 import java.util.Locale;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 /**
  * A reusable block of instructions injected into the context. A skill with no
  * triggers is always active (when enabled); otherwise it is only injected when
  * the latest user message contains one of its trigger phrases.
+ * <p>
+ * Skills are stored as {@code <skills folder>/<id>/SKILL.md}; see {@link SkillFiles} and {@link SkillRepository}.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class SkillDefinition {
+    /** Folder name inside the skills folder; {@code null} for a skill that hasn't been saved yet. */
+    public String id;
     public String name = "";
     public String description = "";
     public String instructions = "";
@@ -31,6 +37,13 @@ public class SkillDefinition {
         this.enabled = enabled;
     }
 
+    public SkillDefinition copy() {
+        SkillDefinition copy = new SkillDefinition(name, description, instructions,
+                triggers == null ? List.of() : triggers, enabled);
+        copy.id = id;
+        return copy;
+    }
+
     public boolean appliesTo(String userMessage) {
         if (!enabled) {
             return false;
@@ -43,14 +56,9 @@ public class SkillDefinition {
                 .anyMatch(t -> text.contains(t.toLowerCase(Locale.ROOT).trim()));
     }
 
+    /** The skills bundled with the app, seeded into an empty skills folder on first start. */
     public static List<SkillDefinition> defaults() {
-        return List.of(
-                new SkillDefinition("Code reviewer", "Reviews code snippets",
-                        "When reviewing code, list concrete bugs first, then risks, then style. Quote the relevant lines.",
-                        List.of("review", "code"), true),
-                new SkillDefinition("Summarizer", "Produces short summaries",
-                        "When asked to summarize, answer with at most 5 bullet points.",
-                        List.of("summarize", "summary", "tl;dr"), true));
+        return SkillFiles.bundledDefaults();
     }
 
     @Override

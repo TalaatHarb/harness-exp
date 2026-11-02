@@ -1,0 +1,150 @@
+package net.talaatharb.harness.history;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
+
+import org.mapdb.DB;
+import org.mapdb.DBMaker;
+import org.mapdb.HTreeMap;
+import org.mapdb.Serializer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.google.inject.Inject;
+import com.google.inject.Singleton;
+import com.google.inject.name.Named;
+
+/**
+ * MapDB-backed conversation history. Records are stored as JSON strings (schema-tolerant across versions) in a
+ * transactional file DB, with a separate summary index for the history list. If the file can't be opened (e.g.
+ * another instance holds the lock) it falls back to an in-memory DB so the app still works.
+ */
+@Singleton
+public class ConversationStore implements AutoCloseable {
+    public static final String DB_PATH = "historyDbPath";
+    private static final Logger LOG = LoggerFactory.getLogger(ConversationStore.class);
+
+    private final ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    private final DB db;
+    private final HTreeMap<String, String> conversations;
+    private final HTreeMap<String, String> index;
+    private final boolean persistent;
+
+    @Inject
+    public ConversationStore(@Named(DB_PATH) Path path) {
+        DB opened = open(path);
+        persistent = opened != null;
+        db = opened != null ? opened : DBMaker.memoryDB().make();
+        conversations = db.hashMap("conversations", Serializer.STRING, Serializer.STRING).createOrOpen();
+        index = db.hashMap("conversation-index", Serializer.STRING, Serializer.STRING).createOrOpen();
+    }
+
+    private static DB open(Path path) {
+        try {
+            Path parent = path.toAbsolutePath().getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            return DBMaker.fileDB(path.toFile()).transactionEnable().closeOnJvmShutdown().make();
+        } catch (IOException | RuntimeException e) {
+            LOG.error("Could not open conversation history at {}; history will not be kept after exit", path, e);
+            return null;
+        }
+    }
+
+    /** {@code false} when running on the in-memory fallback. */
+    public boolean persistent() {
+        return persistent;
+    }
+
+    public synchronized void save(ConversationRecord record) {
+        record.updatedAt = Instant.now();
+        if (record.title == null || record.title.isBlank()) {
+            record.title = record.turns.isEmpty() ? "Untitled" : ConversationRecord.titleFor(record.turns.get(0).userText);
+        }
+        try {
+            conversations.put(record.id, mapper.writeValueAsString(record));
+            index.put(record.id, mapper.writeValueAsString(
+                    new ConversationSummary(record.id, record.title, record.updatedAt, record.turns.size())));
+            db.commit();
+        } catch (IOException | RuntimeException e) {
+            db.rollback();
+            throw new IllegalStateException("Could not save conversation " + record.id, e);
+        }
+    }
+
+    public synchronized Optional<ConversationRecord> load(String id) {
+        String json = id == null ? null : conversations.get(id);
+        if (json == null) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(mapper.readValue(json, ConversationRecord.class));
+        } catch (IOException e) {
+            LOG.error("Conversation {} is unreadable", id, e);
+            return Optional.empty();
+        }
+    }
+
+    /** Most recently updated first. */
+    public synchronized List<ConversationSummary> list() {
+        List<ConversationSummary> result = new ArrayList<>();
+        for (var entry : index.entrySet()) {
+            try {
+                result.add(mapper.readValue(entry.getValue(), ConversationSummary.class));
+            } catch (IOException e) {
+                LOG.warn("Skipping unreadable history entry {}", entry.getKey(), e);
+            }
+        }
+        result.sort(Comparator.comparing(ConversationSummary::updatedAt,
+                Comparator.nullsLast(Comparator.reverseOrder())));
+        return result;
+    }
+
+    /**
+     * Changes only the title; {@code updatedAt} is kept so renaming doesn't reorder the history list.
+     *
+     * @return the normalized title that was stored
+     * @throws IllegalArgumentException if the title is blank or the conversation doesn't exist
+     */
+    public synchronized String rename(String id, String title) {
+        String normalized = ConversationRecord.normalizeTitle(title);
+        ConversationRecord record = load(id)
+                .orElseThrow(() -> new IllegalArgumentException("No saved conversation " + id));
+        record.title = normalized;
+        try {
+            conversations.put(id, mapper.writeValueAsString(record));
+            index.put(id, mapper.writeValueAsString(
+                    new ConversationSummary(id, normalized, record.updatedAt, record.turns.size())));
+            db.commit();
+        } catch (IOException | RuntimeException e) {
+            db.rollback();
+            throw new IllegalStateException("Could not rename conversation " + id, e);
+        }
+        return normalized;
+    }
+
+    public synchronized boolean delete(String id) {
+        boolean removed = conversations.remove(id) != null;
+        index.remove(id);
+        db.commit();
+        return removed;
+    }
+
+    @Override
+    public synchronized void close() {
+        if (!db.isClosed()) {
+            db.close();
+        }
+    }
+}

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox fx:id="root" xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+      fx:controller="net.talaatharb.harness.ui.sections.StorageSectionController" spacing="10" styleClass="section">
+    <padding><Insets top="16" right="16" bottom="16" left="16"/></padding>
+    <Label text="Storage" styleClass="section-title"/>
+    <Label wrapText="true" styleClass="section-help"
+           text="Where skills, agent-built tools and the conversation history are kept. Leave a field empty for the default next to settings.json. Relative paths are resolved against the settings folder and ~ is your home folder. A shared or synced folder works too. Changes apply after a restart, and existing data is not moved: copy it to the new location yourself."/>
+
+    <Label text="Skills folder (&lt;id&gt;/SKILL.md)"/>
+    <HBox spacing="6">
+        <TextField fx:id="skillsField" HBox.hgrow="ALWAYS" styleClass="mono"/>
+        <Button text="Browse…" onAction="#onBrowseSkills"/>
+    </HBox>
+    <Label fx:id="skillsInUse" styleClass="section-help"/>
+
+    <Label text="Dynamic tools folder (&lt;name&gt;.json)"/>
+    <HBox spacing="6">
+        <TextField fx:id="toolsField" HBox.hgrow="ALWAYS" styleClass="mono"/>
+        <Button text="Browse…" onAction="#onBrowseTools"/>
+    </HBox>
+    <Label fx:id="toolsInUse" styleClass="section-help"/>
+
+    <Label text="Conversation history (MapDB file)"/>
+    <HBox spacing="6">
+        <TextField fx:id="historyField" HBox.hgrow="ALWAYS" styleClass="mono"/>
+        <Button text="Browse…" onAction="#onBrowseHistory"/>
+    </HBox>
+    <Label fx:id="historyInUse" styleClass="section-help"/>
+
+    <HBox spacing="8">
+        <Button text="Use defaults" onAction="#onUseDefaults"/>
+    </HBox>
+    <Label fx:id="restartLabel" wrapText="true" styleClass="status-error"
+           text="Save, then restart the app to switch to the new locations."/>
+</VBox>

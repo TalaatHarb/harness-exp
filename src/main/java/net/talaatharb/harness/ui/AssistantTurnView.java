@@ -1,12 +1,17 @@
 package net.talaatharb.harness.ui;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.control.TitledPane;
 import javafx.scene.layout.VBox;
 import net.talaatharb.harness.agent.AgentRunResult;
+import net.talaatharb.harness.llm.ChatMessage;
+import net.talaatharb.harness.llm.Role;
 import net.talaatharb.harness.reply.DynamicUiRenderer;
 import net.talaatharb.harness.reply.ReplyFormat;
 import net.talaatharb.harness.reply.ReplySegment;
@@ -21,13 +26,19 @@ class AssistantTurnView {
 
     private final ReplySettings settings;
     private final Consumer<String> actionSink;
+    private final Runnable onRegenerate;
     private final VBox root = new VBox(6);
     private final Label stream = ChatBubbles.textLabel("…", "bubble", "bubble-assistant", "streaming");
     private boolean receivedTokens;
 
-    AssistantTurnView(ReplySettings settings, Consumer<String> actionSink) {
+    /**
+     * @param actionSink   receives messages from buttons in generated UI
+     * @param onRegenerate reruns this turn; {@code null} hides the regenerate button
+     */
+    AssistantTurnView(ReplySettings settings, Consumer<String> actionSink, Runnable onRegenerate) {
         this.settings = settings;
         this.actionSink = actionSink;
+        this.onRegenerate = onRegenerate;
         root.getStyleClass().add("assistant-turn");
         root.getChildren().add(stream);
     }
@@ -68,13 +79,29 @@ class AssistantTurnView {
 
     void toolResult(ToolCall call, ToolResult result) {
         if (settings.showToolTrace) {
-            String out = result.output() == null ? "" : result.output().replace('\n', ' ');
-            if (out.length() > TRACE_PREVIEW_CHARS) {
-                out = out.substring(0, TRACE_PREVIEW_CHARS) + "…";
-            }
-            addBeforeStream(ChatBubbles.textLabel((result.success() ? "✓ " : "✗ ") + call.name() + ": " + out,
-                    "trace", result.success() ? "trace-ok" : "trace-error"));
+            traceResult(call.name(), result.success(), result.output());
         }
+    }
+
+    /** Rebuilds the tool trace of a stored turn from its transcript messages. */
+    void replay(ChatMessage message) {
+        if (message.role() == Role.ASSISTANT) {
+            ToolCallParser.parse(message.content()).ifPresent(this::toolCall);
+        } else if (message.role() == Role.TOOL && settings.showToolTrace) {
+            String content = message.content();
+            int newline = content.indexOf('\n');
+            String header = newline < 0 ? content : content.substring(0, newline);
+            traceResult(message.name(), header.contains("(success)"), newline < 0 ? "" : content.substring(newline + 1));
+        }
+    }
+
+    private void traceResult(String name, boolean success, String output) {
+        String out = output == null ? "" : output.replace('\n', ' ');
+        if (out.length() > TRACE_PREVIEW_CHARS) {
+            out = out.substring(0, TRACE_PREVIEW_CHARS) + "…";
+        }
+        addBeforeStream(ChatBubbles.textLabel((success ? "✓ " : "✗ ") + name + ": " + out,
+                "trace", success ? "trace-ok" : "trace-error"));
     }
 
     void notice(String notice) {
@@ -99,18 +126,25 @@ class AssistantTurnView {
             if (result.reason() != null) {
                 notice(result.reason());
             }
-            addCopyBar(result.reply());
+            addActions(result.reply());
         } else {
             String text = statusText(result) + (result.reason() == null ? "" : ": " + result.reason());
             root.getChildren().add(ChatBubbles.textLabel(text,
                     "notice", "notice-" + result.status().name().toLowerCase()));
-            addCopyBar(text);
+            addActions(text);
         }
     }
 
-    private void addCopyBar(String text) {
+    private void addActions(String text) {
+        List<Node> actions = new ArrayList<>();
         if (text != null && !text.isBlank()) {
-            root.getChildren().add(ChatBubbles.actionBar(Pos.CENTER_LEFT, ChatBubbles.copyButton(() -> text)));
+            actions.add(ChatBubbles.copyButton(() -> text));
+        }
+        if (onRegenerate != null) {
+            actions.add(ChatBubbles.regenerateButton(onRegenerate));
+        }
+        if (!actions.isEmpty()) {
+            root.getChildren().add(ChatBubbles.actionBar(Pos.CENTER_LEFT, actions.toArray(Node[]::new)));
         }
     }
 

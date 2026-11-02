@@ -4,19 +4,31 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import net.talaatharb.harness.config.HarnessSettings;
 import net.talaatharb.harness.llm.ChatMessage;
 import net.talaatharb.harness.llm.Role;
+import net.talaatharb.harness.skills.SkillRepository;
 
 class ContextBuilderTest {
-    private final ContextBuilder builder = new ContextBuilder(Set.of(new Contributors.HistoryWindow(),
-            new Contributors.SystemPrompt(), new Contributors.Skills(), new Contributors.PinnedContext()));
+    @TempDir
+    static Path tempDir;
+    private static ContextBuilder builder;
+
+    @BeforeAll
+    static void setUp() {
+        builder = new ContextBuilder(Set.of(new Contributors.HistoryWindow(), new Contributors.SystemPrompt(),
+                new Contributors.Skills(new SkillRepository(tempDir.resolve("skills"), null)),
+                new Contributors.PinnedContext()));
+    }
 
     @Test
     void injectsOnlyTriggeredSkillsAndPinnedContext() {

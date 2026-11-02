@@ -7,21 +7,31 @@
 <?import javafx.scene.control.ListView?>
 <?import javafx.scene.control.TextArea?>
 <?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.Tooltip?>
 <?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
 
-<VBox xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+<VBox fx:id="root" xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
       fx:controller="net.talaatharb.harness.ui.sections.SkillsSectionController" spacing="10" styleClass="section">
     <padding><Insets top="16" right="16" bottom="16" left="16"/></padding>
     <Label text="Skills" styleClass="section-title"/>
     <Label wrapText="true" styleClass="section-help"
-           text="Reusable instruction packs. A skill without triggers is always injected; otherwise only when the user's message contains a trigger phrase."/>
+           text="Reusable instruction packs, one &lt;skill&gt;/SKILL.md per skill in the skills folder (front matter + instructions). A skill without triggers is always injected; otherwise only when the user's message contains a trigger phrase. The agent can add skills with the create_skill tool. Changes here are saved straight to the folder; edit the files by hand and press Refresh to pick them up."/>
+    <HBox spacing="6" alignment="CENTER_LEFT">
+        <Label text="Folder:"/>
+        <TextField fx:id="folderField" editable="false" HBox.hgrow="ALWAYS" styleClass="mono"/>
+        <Button text="⟳ Refresh" onAction="#onRefresh">
+            <tooltip><Tooltip text="Re-read the skills folder (picks up outside edits and agent-created skills)"/></tooltip>
+        </Button>
+    </HBox>
+    <Label fx:id="statusLabel" wrapText="true" styleClass="status"/>
     <HBox spacing="12" VBox.vgrow="ALWAYS">
         <VBox spacing="6" prefWidth="220">
             <ListView fx:id="skillList" VBox.vgrow="ALWAYS"/>
             <HBox spacing="6">
-                <Button text="Add" onAction="#onAdd"/>
-                <Button text="Remove" onAction="#onRemove"/>
+                <Button text="New" onAction="#onAdd"/>
+                <Button fx:id="deleteButton" text="Delete" onAction="#onRemove"/>
             </HBox>
         </VBox>
         <VBox fx:id="form" spacing="6" HBox.hgrow="ALWAYS">
@@ -34,6 +44,12 @@
             <TextField fx:id="triggersField"/>
             <Label text="Instructions"/>
             <TextArea fx:id="instructionsArea" wrapText="true" VBox.vgrow="ALWAYS"/>
+            <HBox spacing="6" alignment="CENTER_LEFT">
+                <Label fx:id="fileLabel" styleClass="section-help"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Button fx:id="revertButton" text="Revert" onAction="#onRevert"/>
+                <Button fx:id="saveButton" text="Save skill" onAction="#onSave" defaultButton="false"/>
+            </HBox>
         </VBox>
     </HBox>
 </VBox>

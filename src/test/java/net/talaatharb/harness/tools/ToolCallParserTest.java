@@ -28,6 +28,29 @@ class ToolCallParserTest {
     }
 
     @Test
+    void diagnosesBrokenFencedCallsOnly() {
+        assertTrue(ToolCallParser.diagnose("```tool_call\n{\"name\": \"x\", \"arguments\": {\n```").orElseThrow()
+                .startsWith("invalid JSON"));
+        assertTrue(ToolCallParser.diagnose("```tool_call\n[1, 2]\n```").isPresent());
+        assertTrue(ToolCallParser.diagnose("```tool_call\n{\"name\":\"x\"}\n```").isEmpty());
+        assertTrue(ToolCallParser.diagnose("plain answer with {braces}").isEmpty());
+    }
+
+    @Test
+    void attachesSeparateJavaBlockAsSourceCode() {
+        String reply = "```tool_call\n{\"name\":\"create_tool\",\"arguments\":{\"name\":\"echo\"}}\n```\n"
+                + "```java\npublic class Echo {}\n```";
+        assertEquals("public class Echo {}", ToolCallParser.parse(reply).orElseThrow().arguments().get("sourceCode"));
+    }
+
+    @Test
+    void toleratesRawNewlinesAndTrailingCommas() {
+        ToolCall call = ToolCallParser.parse("```tool_call\n{\"name\":\"t\",\"arguments\":{\"s\":\"a\nb\",},}\n```")
+                .orElseThrow();
+        assertEquals("a\nb", call.arguments().get("s"));
+    }
+
+    @Test
     void signatureIgnoresArgumentOrder() {
         ToolCall a = ToolCallParser.parse("{\"name\":\"t\",\"arguments\":{\"a\":1,\"b\":2}}").orElseThrow();
         ToolCall b = ToolCallParser.parse("{\"name\":\"t\",\"arguments\":{\"b\":2,\"a\":1}}").orElseThrow();

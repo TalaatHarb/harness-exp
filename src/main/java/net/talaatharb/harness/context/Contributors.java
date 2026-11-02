@@ -8,6 +8,7 @@ import net.talaatharb.harness.prompt.PromptTemplate;
 import net.talaatharb.harness.reply.ReplyFormat;
 import net.talaatharb.harness.reply.ReplySettings;
 import net.talaatharb.harness.skills.SkillDefinition;
+import net.talaatharb.harness.skills.SkillRepository;
 import net.talaatharb.harness.tools.Tool;
 import net.talaatharb.harness.tools.ToolCallParser;
 import net.talaatharb.harness.tools.ToolRegistry;
@@ -41,6 +42,13 @@ public final class Contributors {
     }
 
     public static class Skills implements ContextContributor {
+        private final SkillRepository skills;
+
+        @Inject
+        public Skills(SkillRepository skills) {
+            this.skills = skills;
+        }
+
         @Override
         public String id() {
             return "skills";
@@ -48,7 +56,7 @@ public final class Contributors {
 
         @Override
         public String description() {
-            return "Instructions of enabled skills matching the latest message";
+            return "Instructions of enabled skills (skills folder) matching the latest message";
         }
 
         @Override
@@ -58,7 +66,7 @@ public final class Contributors {
 
         @Override
         public void contribute(ContextAssembly a) {
-            List<SkillDefinition> active = a.settings().skills.stream()
+            List<SkillDefinition> active = skills.skills().stream()
                     .filter(s -> s.appliesTo(a.latestUserMessage())).toList();
             if (active.isEmpty()) {
                 return;

@@ -9,8 +9,10 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 
 /**
  * Parses the provider-agnostic text protocol used for tool calls:
@@ -22,12 +24,19 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * </pre>
  *
  * A bare JSON object with {@code name}/{@code arguments} as the whole reply is also accepted,
- * since small local models often drop the fence.
+ * since small local models often drop the fence. JSON is parsed leniently (raw newlines inside strings, trailing
+ * commas), and a {@value #CODE_ARGUMENT} argument may instead be supplied as a separate {@code ```java} block in the
+ * same reply, because models struggle to escape whole source files into JSON strings.
  */
 public final class ToolCallParser {
     public static final String FENCE = "tool_call";
+    public static final String CODE_ARGUMENT = "sourceCode";
     private static final Pattern FENCED = Pattern.compile("```\\s*" + FENCE + "\\s*(\\{.*?})\\s*```", Pattern.DOTALL);
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final Pattern OPEN_FENCE = Pattern.compile("```\\s*" + FENCE + "\\b");
+    private static final Pattern CODE_BLOCK = Pattern.compile("```[ \\t]*java[ \\t]*\\r?\\n(.*?)```", Pattern.DOTALL);
+    private static final ObjectMapper MAPPER = JsonMapper.builder()
+            .enable(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS, JsonReadFeature.ALLOW_TRAILING_COMMA)
+            .build();
     private static final Logger LOG = LoggerFactory.getLogger(ToolCallParser.class);
 
     private ToolCallParser() {
@@ -39,13 +48,53 @@ public final class ToolCallParser {
         }
         Matcher m = FENCED.matcher(reply);
         if (m.find()) {
-            return toCall(m.group(1), true);
+            return toCall(m.group(1), true).map(call -> attachCode(call, reply));
         }
         String trimmed = reply.trim();
         if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
             return toCall(trimmed, false);
         }
         return Optional.empty();
+    }
+
+    private static ToolCall attachCode(ToolCall call, String reply) {
+        Object existing = call.arguments().get(CODE_ARGUMENT);
+        if (existing instanceof String s && !s.isBlank()) {
+            return call;
+        }
+        Matcher code = CODE_BLOCK.matcher(reply);
+        if (!code.find()) {
+            return call;
+        }
+        Map<String, Object> arguments = new LinkedHashMap<>(call.arguments());
+        arguments.put(CODE_ARGUMENT, code.group(1).strip());
+        return new ToolCall(call.name(), arguments);
+    }
+
+    /**
+     * Explains why a reply that clearly attempts a tool call (it has a {@code tool_call} fence) could not be parsed,
+     * so the loop can ask the model to correct it instead of showing the raw block as the answer.
+     */
+    public static Optional<String> diagnose(String reply) {
+        if (reply == null || parse(reply).isPresent()) {
+            return Optional.empty();
+        }
+        Matcher open = OPEN_FENCE.matcher(reply);
+        if (!open.find()) {
+            return Optional.empty();
+        }
+        int end = reply.indexOf("```", open.end());
+        String body = (end < 0 ? reply.substring(open.end()) : reply.substring(open.end(), end)).trim();
+        try {
+            Object value = MAPPER.readValue(body, Object.class);
+            if (!(value instanceof Map<?, ?> map) || !(map.get("name") instanceof String)) {
+                return Optional.of("expected a JSON object with a string \"name\" and an \"arguments\" object");
+            }
+            return Optional.of("the block could not be read as a tool call");
+        } catch (Exception e) {
+            String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+            return Optional.of("invalid JSON: " + message.lines().findFirst().orElse(message));
+        }
     }
 
     private static Optional<ToolCall> toCall(String json, boolean explicit) {

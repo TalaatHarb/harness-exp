@@ -3,8 +3,14 @@ package net.talaatharb.harness.config;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.google.inject.AbstractModule;
+import com.google.inject.Provides;
+import com.google.inject.Singleton;
 import com.google.inject.multibindings.Multibinder;
+import com.google.inject.name.Named;
 import com.google.inject.name.Names;
 
 import net.talaatharb.harness.agent.AgentHook;
@@ -16,11 +22,16 @@ import net.talaatharb.harness.guardrails.BlockedTermsGuardrail;
 import net.talaatharb.harness.guardrails.Guardrail;
 import net.talaatharb.harness.guardrails.InputLengthGuardrail;
 import net.talaatharb.harness.guardrails.SecretRedactionGuardrail;
+import net.talaatharb.harness.history.ConversationStore;
+import net.talaatharb.harness.skills.CreateSkillTool;
+import net.talaatharb.harness.skills.SkillRepository;
 import net.talaatharb.harness.llm.ModelProvider;
 import net.talaatharb.harness.llm.OllamaModelProvider;
 import net.talaatharb.harness.tools.Tool;
 import net.talaatharb.harness.tools.builtin.CurrentTimeTool;
 import net.talaatharb.harness.tools.builtin.ReadFileTool;
+import net.talaatharb.harness.tools.dynamic.CreateToolTool;
+import net.talaatharb.harness.tools.dynamic.DynamicToolRegistry;
 import net.talaatharb.harness.tools.mcp.McpToolSource;
 import net.talaatharb.harness.tools.mcp.UnconnectedMcpToolSource;
 import net.talaatharb.harness.ui.DialogApprovalGateway;
@@ -30,6 +41,7 @@ import net.talaatharb.harness.ui.DialogApprovalGateway;
  * can add providers, tools, guardrails, context stages and hooks in one place.
  */
 public class AppModule extends AbstractModule {
+    private static final Logger LOG = LoggerFactory.getLogger(AppModule.class);
     private final Path settingsPath;
 
     public AppModule() {
@@ -58,6 +70,8 @@ public class AppModule extends AbstractModule {
         Multibinder<Tool> tools = Multibinder.newSetBinder(binder(), Tool.class);
         tools.addBinding().to(CurrentTimeTool.class);
         tools.addBinding().to(ReadFileTool.class);
+        tools.addBinding().to(CreateToolTool.class);
+        tools.addBinding().to(CreateSkillTool.class);
         bind(McpToolSource.class).to(UnconnectedMcpToolSource.class);
 
         Multibinder<Guardrail> guardrails = Multibinder.newSetBinder(binder(), Guardrail.class);
@@ -79,8 +93,35 @@ public class AppModule extends AbstractModule {
         bindApprovalGateway();
     }
 
-    /** Overridable so headless tests can auto-approve. */
-    protected void bindApprovalGateway() {
+    /** Data locations from the settings' {@code storage} block, fixed for this run (changes apply after restart). */
+    @Provides
+    @Singleton
+    StoragePaths storagePaths(SettingsStore store) {
+        StoragePaths paths = StoragePaths.resolve(settingsPath, store.current().storage);
+        LOG.info("Storage: skills={}, dynamic tools={}, history={}", paths.skillsDir(), paths.dynamicToolsDir(),
+                paths.historyDb());
+        return paths;
+    }
+
+    @Provides
+    @Named(SkillRepository.SKILLS_DIR)
+    Path skillsDir(StoragePaths paths) {
+        return paths.skillsDir();
+    }
+
+    @Provides
+    @Named(DynamicToolRegistry.STORAGE_DIR)
+    Path dynamicToolsDir(StoragePaths paths) {
+        return paths.dynamicToolsDir();
+    }
+
+    @Provides
+    @Named(ConversationStore.DB_PATH)
+    Path historyDb(StoragePaths paths) {
+        return paths.historyDb();
+    }
+
+    /** Overridable so headless tests can auto-approve. */    protected void bindApprovalGateway() {
         bind(ApprovalGateway.class).to(DialogApprovalGateway.class);
     }
 }

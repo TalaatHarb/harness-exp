@@ -21,6 +21,7 @@
             <Tab text="Guardrails"><fx:include fx:id="guardrailsSection" source="sections/guardrails-section.fxml"/></Tab>
             <Tab text="Human approval"><fx:include fx:id="approvalSection" source="sections/approval-section.fxml"/></Tab>
             <Tab text="Reply &amp; UI"><fx:include fx:id="replySection" source="sections/reply-section.fxml"/></Tab>
+            <Tab text="Storage"><fx:include fx:id="storageSection" source="sections/storage-section.fxml"/></Tab>
         </TabPane>
     </center>
     <bottom>

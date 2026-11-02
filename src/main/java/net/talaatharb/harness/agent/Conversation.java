@@ -21,6 +21,21 @@ public class Conversation {
         messages.clear();
     }
 
+    /** Drops every message from {@code size} onward (used to rewind before regenerating a turn). */
+    public synchronized void truncate(int size) {
+        if (size < 0) {
+            throw new IllegalArgumentException("size must be >= 0");
+        }
+        if (size < messages.size()) {
+            messages.subList(size, messages.size()).clear();
+        }
+    }
+
+    public synchronized void replaceAll(List<ChatMessage> transcript) {
+        messages.clear();
+        messages.addAll(transcript);
+    }
+
     public synchronized int size() {
         return messages.size();
     }

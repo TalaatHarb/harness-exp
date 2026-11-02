@@ -14,6 +14,7 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
 import net.talaatharb.harness.config.AppModule;
+import net.talaatharb.harness.history.ConversationStore;
 import net.talaatharb.harness.ui.MainController;
 import net.talaatharb.harness.ui.UiSupport;
 
@@ -46,6 +47,9 @@ public class HarnessApp extends Application {
     public void stop() {
         if (mainController != null) {
             mainController.shutdown();
+        }
+        if (injector != null) {
+            injector.getInstance(ConversationStore.class).close();
         }
     }
 

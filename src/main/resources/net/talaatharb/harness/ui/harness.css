@@ -136,3 +136,22 @@
     -fx-text-fill: #374151;
     -fx-background-radius: 6;
 }
+
+.history-pane {
+    -fx-background-color: #f6f7f9;
+    -fx-border-color: transparent #dde1e6 transparent transparent;
+}
+
+.history-heading {
+    -fx-font-weight: bold;
+    -fx-text-fill: #374151;
+}
+
+.history-list {
+    -fx-background-color: transparent;
+}
+
+.history-meta {
+    -fx-font-size: 10px;
+    -fx-text-fill: #9ca3af;
+}

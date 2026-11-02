@@ -2,6 +2,7 @@ package net.talaatharb.harness.ui.sections;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import com.google.inject.Inject;
 
@@ -10,22 +11,29 @@ import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
+import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.Label;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.cell.CheckBoxTableCell;
 import net.talaatharb.harness.config.HarnessSettings;
 import net.talaatharb.harness.tools.Tool;
 import net.talaatharb.harness.tools.ToolRegistry;
+import net.talaatharb.harness.tools.dynamic.DynamicToolRegistry;
+import net.talaatharb.harness.tools.dynamic.DynamicToolSpec;
 import net.talaatharb.harness.tools.mcp.McpServerConfig;
 import net.talaatharb.harness.tools.mcp.McpToolSource;
 
 public class ToolsSectionController implements SettingsSection {
     private final ToolRegistry registry;
     private final McpToolSource mcp;
+    private final DynamicToolRegistry dynamic;
     private final ObservableList<ToolRow> tools = FXCollections.observableArrayList();
     private final ObservableList<McpRow> servers = FXCollections.observableArrayList();
 
@@ -46,6 +54,7 @@ public class ToolsSectionController implements SettingsSection {
     @FXML private TextField mcpNameField;
     @FXML private ComboBox<McpServerConfig.Transport> mcpTransportCombo;
     @FXML private TextField mcpEndpointField;
+    @FXML private Label dynamicStatusLabel;
 
     static final class ToolRow {
         final Tool tool;
@@ -68,9 +77,10 @@ public class ToolsSectionController implements SettingsSection {
     }
 
     @Inject
-    public ToolsSectionController(ToolRegistry registry, McpToolSource mcp) {
+    public ToolsSectionController(ToolRegistry registry, McpToolSource mcp, DynamicToolRegistry dynamic) {
         this.registry = registry;
         this.mcp = mcp;
+        this.dynamic = dynamic;
     }
 
     @FXML
@@ -95,6 +105,55 @@ public class ToolsSectionController implements SettingsSection {
 
         mcpTransportCombo.setItems(FXCollections.observableArrayList(McpServerConfig.Transport.values()));
         mcpTransportCombo.setValue(McpServerConfig.Transport.STDIO);
+
+        dynamicStatusLabel.setText((dynamic.compilerAvailable() ? "Java compiler available"
+                : "Java compiler NOT available (run on a JDK)") + " · stored in " + dynamic.storageDir());
+    }
+
+    @FXML
+    private void onViewDynamicSource() {
+        selectedDynamicSpec().ifPresent(spec -> {
+            TextArea source = new TextArea(spec.sourceCode);
+            source.setEditable(false);
+            source.getStyleClass().add("mono");
+            source.setPrefSize(720, 460);
+            Alert alert = new Alert(Alert.AlertType.INFORMATION);
+            alert.initOwner(toolTable.getScene().getWindow());
+            alert.setTitle("Dynamic tool: " + spec.name);
+            alert.setHeaderText(spec.description + "\nArguments: " + spec.argumentsHint
+                    + (spec.createdAt == null ? "" : "\nCreated: " + spec.createdAt));
+            alert.getDialogPane().setContent(source);
+            alert.setResizable(true);
+            alert.showAndWait();
+        });
+    }
+
+    @FXML
+    private void onDeleteDynamicTool() {
+        ToolRow row = toolTable.getSelectionModel().getSelectedItem();
+        if (selectedDynamicSpec().isEmpty()) {
+            return;
+        }
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Delete the agent-created tool '" + row.tool.name() + "'? This takes effect immediately.",
+                ButtonType.OK, ButtonType.CANCEL);
+        confirm.initOwner(toolTable.getScene().getWindow());
+        if (confirm.showAndWait().orElse(ButtonType.CANCEL) == ButtonType.OK && dynamic.remove(row.tool.name())) {
+            tools.remove(row);
+        }
+    }
+
+    private Optional<DynamicToolSpec> selectedDynamicSpec() {
+        ToolRow row = toolTable.getSelectionModel().getSelectedItem();
+        if (row == null) {
+            dynamicStatusLabel.setText("Select an agent-created tool (source: dynamic) in the table first.");
+            return Optional.empty();
+        }
+        Optional<DynamicToolSpec> spec = dynamic.spec(row.tool.name());
+        if (spec.isEmpty()) {
+            dynamicStatusLabel.setText("'" + row.tool.name() + "' is not an agent-created tool.");
+        }
+        return spec;
     }
 
     @Override

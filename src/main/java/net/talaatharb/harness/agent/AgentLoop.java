@@ -13,7 +13,6 @@ import com.google.inject.Singleton;
 
 import net.talaatharb.harness.agent.AgentRunResult.Status;
 import net.talaatharb.harness.approval.ApprovalDecision;
-import net.talaatharb.harness.approval.ApprovalRequest;
 import net.talaatharb.harness.approval.ApprovalService;
 import net.talaatharb.harness.config.HarnessSettings;
 import net.talaatharb.harness.config.SettingsStore;
@@ -41,6 +40,9 @@ import net.talaatharb.harness.tools.ToolResult;
 @Singleton
 public class AgentLoop {
     private static final Logger LOG = LoggerFactory.getLogger(AgentLoop.class);
+    static final String MALFORMED_TOOL_CALL = "Error: your tool_call block could not be used. Reply with exactly one "
+            + "```tool_call block containing a single JSON object {\"name\": \"...\", \"arguments\": {...}}; "
+            + "escape quotes (\\\") and newlines (\\n) inside JSON strings. Problem: ";
 
     private final SettingsStore store;
     private final ModelProviderRegistry providers;
@@ -162,7 +164,20 @@ public class AgentLoop {
 
             Optional<ToolCall> call = ToolCallParser.parse(reply.content());
             if (call.isEmpty()) {
-                return finalAnswer(ctx, conversation, reply.content());
+                Optional<String> malformed = ToolCallParser.diagnose(reply.content());
+                if (malformed.isEmpty()) {
+                    return finalAnswer(ctx, conversation, reply.content());
+                }
+                // Bounded by maxIterations: each correction attempt costs one iteration.
+                conversation.add(ChatMessage.assistant(reply.content()));
+                listener.onIntermediateReply(reply.content());
+                LOG.warn("Run {}: malformed tool call ({}), asking the model to correct it", ctx.runId(),
+                        malformed.get());
+                ctx.recordError(new IllegalArgumentException("Malformed tool call: " + malformed.get()));
+                hooks.fire(HookPoint.ON_ERROR, ctx);
+                listener.onNotice("Malformed tool call (" + malformed.get() + "), asking the model to fix it");
+                conversation.add(ChatMessage.tool(ToolCallParser.FENCE, MALFORMED_TOOL_CALL + malformed.get()));
+                continue;
             }
 
             conversation.add(ChatMessage.assistant(reply.content()));
@@ -213,9 +228,10 @@ public class AgentLoop {
         }
         if (approvals.requiresApproval(tool, s)) {
             listener.onNotice("Waiting for approval to run '" + tool.name() + "'…");
-            ApprovalDecision decision = approvals.await(
-                    new ApprovalRequest(tool.name(), argsJson, tool.risk(), "Policy: " + s.approval.policy), s);
+            ApprovalDecision decision = approvals.await(approvals.requestFor(tool, argsJson, s), s);
+            LOG.info("Run {}: approval for '{}' ({}): {}", ctx.runId(), tool.name(), tool.risk(), decision);
             if (!decision.approved()) {
+                listener.onNotice("'" + tool.name() + "' was not approved");
                 return ToolResult.error("The user denied this tool call. Do not retry it; continue without it.");
             }
         }
