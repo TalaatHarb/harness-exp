@@ -11,12 +11,13 @@
 <?import javafx.scene.control.ToggleButton?>
 <?import javafx.scene.control.Tooltip?>
 <?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.FlowPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Priority?>
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.VBox?>
 
-<BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+<BorderPane fx:id="root" xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
             fx:controller="net.talaatharb.harness.ui.MainController" styleClass="main">
     <top>
         <HBox spacing="8" alignment="CENTER_LEFT" styleClass="top-bar">
@@ -66,14 +67,20 @@
         </ScrollPane>
     </center>
     <bottom>
-        <HBox spacing="8" alignment="BOTTOM_CENTER" styleClass="composer">
+        <VBox fx:id="composer" spacing="6" styleClass="composer">
             <padding><Insets top="8" right="12" bottom="12" left="12"/></padding>
-            <TextArea fx:id="inputArea" HBox.hgrow="ALWAYS" prefRowCount="3" wrapText="true"
-                      promptText="Message the agent (Enter to send, Shift+Enter for a new line)"/>
-            <VBox spacing="6">
-                <Button fx:id="sendButton" text="Send" defaultButton="false" onAction="#onSend" maxWidth="Infinity"/>
-                <Button fx:id="stopButton" text="Stop" onAction="#onStop" disable="true" maxWidth="Infinity"/>
-            </VBox>
-        </HBox>
+            <FlowPane fx:id="attachmentsBar" hgap="6" vgap="6" visible="false" managed="false"/>
+            <HBox spacing="8" alignment="BOTTOM_CENTER">
+                <Button fx:id="attachButton" text="📎" onAction="#onAttach">
+                    <tooltip><Tooltip text="Attach files: markdown/text, PDF, pictures, audio (or drop them here)"/></tooltip>
+                </Button>
+                <TextArea fx:id="inputArea" HBox.hgrow="ALWAYS" prefRowCount="3" wrapText="true"
+                          promptText="Message the agent (Enter to send, Shift+Enter for a new line, drop files to attach)"/>
+                <VBox spacing="6">
+                    <Button fx:id="sendButton" text="Send" defaultButton="false" onAction="#onSend" maxWidth="Infinity"/>
+                    <Button fx:id="stopButton" text="Stop" onAction="#onStop" disable="true" maxWidth="Infinity"/>
+                </VBox>
+            </HBox>
+        </VBox>
     </bottom>
 </BorderPane>

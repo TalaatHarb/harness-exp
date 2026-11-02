@@ -20,6 +20,14 @@
         <Label text="History window (messages)"/>
         <Spinner fx:id="historySpinner" prefWidth="100"/>
     </HBox>
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Label text="Attachments: max files"/>
+        <Spinner fx:id="maxAttachmentsSpinner" prefWidth="80"/>
+        <Label text="max MB per file"/>
+        <Spinner fx:id="maxAttachmentMbSpinner" prefWidth="80"/>
+        <Label text="max text chars"/>
+        <Spinner fx:id="maxAttachmentTextSpinner" prefWidth="110"/>
+    </HBox>
     <Label text="Pinned context"/>
     <TextArea fx:id="pinnedArea" wrapText="true" prefRowCount="4"/>
     <HBox spacing="8" alignment="CENTER_LEFT">

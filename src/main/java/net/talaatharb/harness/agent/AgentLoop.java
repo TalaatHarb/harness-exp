@@ -1,5 +1,6 @@
 package net.talaatharb.harness.agent;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -20,6 +21,8 @@ import net.talaatharb.harness.context.ContextBuilder;
 import net.talaatharb.harness.guardrails.GuardrailResult;
 import net.talaatharb.harness.guardrails.GuardrailService;
 import net.talaatharb.harness.guardrails.GuardrailStage;
+import net.talaatharb.harness.guardrails.InputLengthGuardrail;
+import net.talaatharb.harness.llm.Attachment;
 import net.talaatharb.harness.llm.ChatMessage;
 import net.talaatharb.harness.llm.ModelProvider;
 import net.talaatharb.harness.llm.ModelProviderException;
@@ -64,14 +67,25 @@ public class AgentLoop {
         this.hooks = hooks;
     }
 
-    public HookRegistry hooks() {
-        return hooks;
+    private HarnessSettings attachmentGuardSettings(HarnessSettings s) {
+        HarnessSettings copy = store.mapper().convertValue(s, HarnessSettings.class);
+        copy.guardrails.disabledGuardrails.add(InputLengthGuardrail.ID);
+        return copy;
+    }
+
+    public HookRegistry hooks() {        return hooks;
     }
 
     public AgentRunResult run(String userMessage, Conversation conversation, AgentListener listener,
             AtomicBoolean cancelled) {
+        return run(userMessage, List.of(), conversation, listener, cancelled);
+    }
+
+    /** Runs the agent for a user message with files attached (see {@link Attachment}). */
+    public AgentRunResult run(String userMessage, List<Attachment> attachments, Conversation conversation,
+            AgentListener listener, AtomicBoolean cancelled) {
         HarnessSettings settings = store.current();
-        AgentRunContext ctx = new AgentRunContext(userMessage, settings, cancelled);
+        AgentRunContext ctx = new AgentRunContext(userMessage, attachments, settings, cancelled);
         AgentRunResult result;
         try {
             result = loop(ctx, conversation, listener);
@@ -110,7 +124,25 @@ public class AgentLoop {
         if (input.decision() == GuardrailResult.Decision.MODIFY) {
             listener.onNotice("Input modified by guardrails: " + input.reason());
         }
-        conversation.add(ChatMessage.user(input.content()));
+        List<Attachment> attachments = new ArrayList<>();
+        for (Attachment attachment : ctx.attachments()) {
+            if (attachment.text() == null) {
+                attachments.add(attachment);
+                continue;
+            }
+            // Attachments have their own size limits, so the message length guardrail doesn't apply to them.
+            GuardrailResult check = guardrails.evaluate(GuardrailStage.INPUT, attachment.text(),
+                    attachmentGuardSettings(s));
+            if (check.blocked()) {
+                return result(ctx, Status.BLOCKED, null, "Attachment " + attachment.name() + ": " + check.reason());
+            }
+            if (check.decision() == GuardrailResult.Decision.MODIFY) {
+                listener.onNotice("Attachment " + attachment.name() + " modified by guardrails: " + check.reason());
+                attachment = attachment.withText(check.content());
+            }
+            attachments.add(attachment);
+        }
+        conversation.add(ChatMessage.user(input.content(), attachments));
 
         ModelProvider provider;
         try {

@@ -4,6 +4,7 @@
 <?import javafx.scene.control.Button?>
 <?import javafx.scene.control.Tab?>
 <?import javafx.scene.control.TabPane?>
+<?import javafx.scene.control.Tooltip?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.Region?>
@@ -28,6 +29,12 @@
         <HBox spacing="8" alignment="CENTER_RIGHT">
             <padding><Insets top="8" right="12" bottom="12" left="12"/></padding>
             <Button text="Reset all to defaults" onAction="#onResetDefaults"/>
+            <Button text="Export…" onAction="#onExport">
+                <tooltip><Tooltip text="Save settings, skills and dynamic tools to one JSON file"/></tooltip>
+            </Button>
+            <Button text="Import…" onAction="#onImport">
+                <tooltip><Tooltip text="Load settings, skills and dynamic tools from an exported JSON file"/></tooltip>
+            </Button>
             <Region HBox.hgrow="ALWAYS"/>
             <Button text="Cancel" cancelButton="true" onAction="#onCancel"/>
             <Button text="Apply" onAction="#onApply"/>

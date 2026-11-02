@@ -2,9 +2,12 @@ package net.talaatharb.harness.ui;
 
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -17,6 +20,8 @@ import com.google.inject.Inject;
 
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
+import javafx.beans.property.IntegerProperty;
+import javafx.beans.property.SimpleIntegerProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
@@ -37,20 +42,30 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.TextFormatter;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.ToggleButton;
+import javafx.scene.input.Clipboard;
 import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.input.TransferMode;
 import javafx.scene.input.MouseButton;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.VBox;
+import javafx.stage.FileChooser;
+import net.talaatharb.harness.attachments.AttachmentLoader;
 import net.talaatharb.harness.agent.AgentListener;
 import net.talaatharb.harness.agent.AgentLoop;
 import net.talaatharb.harness.agent.AgentRunResult;
 import net.talaatharb.harness.agent.Conversation;
 import net.talaatharb.harness.config.HarnessSettings;
 import net.talaatharb.harness.config.SettingsStore;
+import net.talaatharb.harness.context.ContextSettings;
 import net.talaatharb.harness.history.ConversationRecord;
 import net.talaatharb.harness.history.ConversationStore;
 import net.talaatharb.harness.history.ConversationSummary;
 import net.talaatharb.harness.history.TurnRecord;
+import net.talaatharb.harness.llm.Attachment;
 import net.talaatharb.harness.llm.ChatMessage;
+import net.talaatharb.harness.llm.Role;
 import net.talaatharb.harness.llm.ModelProviderRegistry;
 import net.talaatharb.harness.tools.ToolCall;
 import net.talaatharb.harness.tools.ToolResult;
@@ -82,6 +97,9 @@ public class MainController {
     private Conversation conversation = new Conversation();
     private final List<Exchange> exchanges = new ArrayList<>();
 
+    /** Files attached in the composer for the next message. */
+    private final ObservableList<Attachment> pending = FXCollections.observableArrayList();
+    private final IntegerProperty loadingAttachments = new SimpleIntegerProperty();
     private Future<?> running;
     private AtomicBoolean cancelFlag;
 
@@ -90,6 +108,10 @@ public class MainController {
     @FXML private ScrollPane scrollPane;
     @FXML private VBox messagesBox;
     @FXML private Label emptyLabel;
+    @FXML private BorderPane root;
+    @FXML private VBox composer;
+    @FXML private FlowPane attachmentsBar;
+    @FXML private Button attachButton;
     @FXML private TextArea inputArea;
     @FXML private Button sendButton;
     @FXML private Button stopButton;
@@ -105,11 +127,13 @@ public class MainController {
     private static final class Exchange {
         final TurnRecord turn;
         final Node userNode;
+        final List<Attachment> attachments;
         AssistantTurnView view;
 
-        Exchange(TurnRecord turn, Node userNode) {
+        Exchange(TurnRecord turn, List<Attachment> attachments) {
             this.turn = turn;
-            this.userNode = userNode;
+            this.attachments = List.copyOf(attachments);
+            this.userNode = ChatBubbles.user(turn.userText, this.attachments);
         }
     }
 
@@ -141,6 +165,7 @@ public class MainController {
             }
         }));
         initHistory();
+        initAttachments();
         onRefreshModels();
     }
 
@@ -352,7 +377,7 @@ public class MainController {
         for (int i = 0; i < rec.turns.size(); i++) {
             TurnRecord turn = rec.turns.get(i);
             int end = i + 1 < rec.turns.size() ? rec.turns.get(i + 1).messageStart : rec.messages.size();
-            Exchange exchange = addExchange(turn, settings);
+            Exchange exchange = addExchange(turn, settings, attachmentsOf(rec, turn));
             // messageStart is the user message; replay everything the agent did after it.
             for (int m = Math.max(0, turn.messageStart + 1); m < Math.min(end, rec.messages.size()); m++) {
                 exchange.view.replay(rec.messages.get(m));
@@ -366,9 +391,19 @@ public class MainController {
         inputArea.requestFocus();
     }
 
-    private Exchange addExchange(TurnRecord turn, HarnessSettings settings) {
+    private static List<Attachment> attachmentsOf(ConversationRecord rec, TurnRecord turn) {
+        if (turn.messageStart >= 0 && turn.messageStart < rec.messages.size()) {
+            ChatMessage message = rec.messages.get(turn.messageStart);
+            if (message.role() == Role.USER) {
+                return message.attachments();
+            }
+        }
+        return List.of();
+    }
+
+    private Exchange addExchange(TurnRecord turn, HarnessSettings settings, List<Attachment> attachments) {
         messagesBox.getChildren().remove(emptyLabel);
-        Exchange exchange = new Exchange(turn, ChatBubbles.user(turn.userText));
+        Exchange exchange = new Exchange(turn, attachments);
         exchange.view = new AssistantTurnView(settings.reply, this::send, () -> regenerate(exchange));
         exchanges.add(exchange);
         messagesBox.getChildren().addAll(exchange.userNode, exchange.view.root());
@@ -377,16 +412,22 @@ public class MainController {
 
     @FXML
     private void onSend() {
-        send(inputArea.getText());
+        String text = inputArea.getText();
+        if (isRunning() || loadingAttachments.get() > 0 || ((text == null || text.isBlank()) && pending.isEmpty())) {
+            return;
+        }
+        List<Attachment> attachments = List.copyOf(pending);
+        pending.clear();
+        inputArea.clear();
+        start(text == null ? "" : text.strip(), attachments);
     }
 
-    /** Also used by buttons in generated UI to send an action back to the agent. */
+    /** Used by buttons in generated UI to send an action back to the agent (composer attachments stay pending). */
     void send(String text) {
         if (text == null || text.isBlank() || isRunning()) {
             return;
         }
-        inputArea.clear();
-        start(text.strip());
+        start(text.strip(), List.of());
     }
 
     /** Rewinds the chat to just before {@code exchange} and runs the same request again. */
@@ -403,23 +444,23 @@ public class MainController {
         record.turns.subList(Math.min(index, record.turns.size()), record.turns.size()).clear();
         conversation.truncate(Math.min(exchange.turn.messageStart, conversation.size()));
         LOG.info("Regenerating turn {} of conversation {}", index + 1, record.id);
-        start(exchange.turn.userText);
+        start(exchange.turn.userText, exchange.attachments);
     }
 
-    private void start(String text) {
+    private void start(String text, List<Attachment> attachments) {
         onModelChosen();
         HarnessSettings settings = store.current();
         ConversationRecord runRecord = record;
         Conversation runConversation = conversation;
         TurnRecord turn = new TurnRecord(text, runConversation.size());
         runRecord.turns.add(turn);
-        Exchange exchange = addExchange(turn, settings);
+        Exchange exchange = addExchange(turn, settings, attachments);
         setRunning(true);
         AtomicBoolean cancel = new AtomicBoolean();
         cancelFlag = cancel;
         running = executor.submit(() -> {
             try {
-                runAgent(text, exchange.view, runConversation, cancel, result -> {
+                runAgent(text, attachments, exchange.view, runConversation, cancel, result -> {
                     turn.complete(result);
                     persist(runRecord, runConversation);
                     if (cancelFlag == cancel) {
@@ -455,9 +496,9 @@ public class MainController {
         refreshHistory();
     }
 
-    private void runAgent(String text, AssistantTurnView turn, Conversation transcript, AtomicBoolean cancel,
+    private void runAgent(String text, List<Attachment> attachments, AssistantTurnView turn, Conversation transcript, AtomicBoolean cancel,
             java.util.function.Consumer<AgentRunResult> onDone) {
-        agentLoop.run(text, transcript, new AgentListener() {
+        agentLoop.run(text, attachments, transcript, new AgentListener() {
             @Override
             public void onToken(String token) {
                 Platform.runLater(() -> turn.appendToken(token));
@@ -498,6 +539,121 @@ public class MainController {
         }, cancel);
     }
 
+    // ---- attachments -------------------------------------------------------------------------------------------
+
+    private void initAttachments() {
+        sendButton.disableProperty().bind(Bindings.createBooleanBinding(
+                () -> !stopButton.isDisable() || loadingAttachments.get() > 0, stopButton.disableProperty(),
+                loadingAttachments));
+        pending.addListener((javafx.collections.ListChangeListener<Attachment>) c -> renderPending());
+        root.setOnDragOver(e -> {
+            if (e.getDragboard().hasFiles() && e.getDragboard().getFiles().stream()
+                    .anyMatch(f -> AttachmentLoader.supported(f.toPath()))) {
+                e.acceptTransferModes(TransferMode.COPY);
+                if (!composer.getStyleClass().contains("drop-target")) {
+                    composer.getStyleClass().add("drop-target");
+                }
+            }
+            e.consume();
+        });
+        root.setOnDragExited(e -> composer.getStyleClass().remove("drop-target"));
+        root.setOnDragDropped(e -> {
+            boolean ok = e.getDragboard().hasFiles();
+            if (ok) {
+                attach(e.getDragboard().getFiles());
+            }
+            e.setDropCompleted(ok);
+            e.consume();
+        });
+        // Pasting copied files (e.g. from the file explorer) attaches them.
+        inputArea.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
+            if (e.isShortcutDown() && e.getCode() == KeyCode.V && Clipboard.getSystemClipboard().hasFiles()) {
+                attach(Clipboard.getSystemClipboard().getFiles());
+                e.consume();
+            }
+        });
+    }
+
+    @FXML
+    private void onAttach() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Attach files");
+        chooser.getExtensionFilters().addAll(
+                filter("Supported files", AttachmentLoader.TEXT_EXTENSIONS, AttachmentLoader.PDF_EXTENSIONS,
+                        AttachmentLoader.IMAGE_EXTENSIONS, AttachmentLoader.AUDIO_EXTENSIONS),
+                filter("Markdown / text", AttachmentLoader.TEXT_EXTENSIONS),
+                filter("PDF", AttachmentLoader.PDF_EXTENSIONS),
+                filter("Pictures", AttachmentLoader.IMAGE_EXTENSIONS),
+                filter("Audio", AttachmentLoader.AUDIO_EXTENSIONS));
+        List<File> files = chooser.showOpenMultipleDialog(root.getScene().getWindow());
+        if (files != null) {
+            attach(files);
+        }
+    }
+
+    private static FileChooser.ExtensionFilter filter(String title, String[]... groups) {
+        List<String> patterns = new ArrayList<>();
+        for (String[] group : groups) {
+            for (String ext : group) {
+                patterns.add("*." + ext);
+            }
+        }
+        return new FileChooser.ExtensionFilter(title, patterns);
+    }
+
+    /** Loads files off the UI thread (PDF parsing can take a moment) and adds them to the pending list. */
+    void attach(List<File> files) {
+        ContextSettings limits = store.current().context;
+        List<String> problems = new ArrayList<>();
+        for (File file : files) {
+            if (pending.size() + loadingAttachments.get() >= limits.maxAttachments) {
+                problems.add(file.getName() + ": at most " + limits.maxAttachments + " files per message");
+                continue;
+            }
+            if (!AttachmentLoader.supported(file.toPath())) {
+                problems.add(file.getName() + ": unsupported type (use markdown/text, PDF, pictures or audio)");
+                continue;
+            }
+            loadingAttachments.set(loadingAttachments.get() + 1);
+            CompletableFuture.supplyAsync(() -> {
+                try {
+                    return AttachmentLoader.load(file.toPath(), limits);
+                } catch (IOException e) {
+                    throw new java.io.UncheckedIOException(e);
+                }
+            }).whenComplete((attachment, error) -> Platform.runLater(() -> {
+                loadingAttachments.set(loadingAttachments.get() - 1);
+                if (error == null) {
+                    pending.add(attachment);
+                    return;
+                }
+                Throwable cause = error instanceof java.util.concurrent.CompletionException && error.getCause() != null
+                        ? error.getCause() : error;
+                LOG.warn("Could not attach {}", file, cause);
+                showAttachProblems(List.of(cause.getMessage() == null ? file.getName() : cause.getMessage()));
+            }));
+        }
+        if (!problems.isEmpty()) {
+            problems.forEach(p -> LOG.warn("Attachment rejected: {}", p));
+            showAttachProblems(problems);
+        }
+    }
+
+    private void showAttachProblems(List<String> problems) {
+        Alert alert = new Alert(Alert.AlertType.WARNING, String.join("\n", problems), ButtonType.OK);
+        alert.initOwner(root.getScene().getWindow());
+        alert.setHeaderText("Some files were not attached");
+        alert.show();
+    }
+
+    private void renderPending() {
+        attachmentsBar.getChildren().setAll(pending.stream()
+                .map(a -> (Node) AttachmentViews.chip(a, () -> pending.remove(a))).toList());
+        boolean any = !pending.isEmpty();
+        attachmentsBar.setVisible(any);
+        attachmentsBar.setManaged(any);
+    }
+
     @FXML
     private void onStop() {
         if (cancelFlag != null) {
@@ -513,7 +669,6 @@ public class MainController {
     }
 
     private void setRunning(boolean value) {
-        sendButton.setDisable(value);
         stopButton.setDisable(!value);
         if (!value) {
             inputArea.requestFocus();

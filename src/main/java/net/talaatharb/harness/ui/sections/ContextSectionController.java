@@ -25,6 +25,9 @@ public class ContextSectionController implements SettingsSection {
 
     @FXML private VBox contributorsBox;
     @FXML private Spinner<Integer> historySpinner;
+    @FXML private Spinner<Integer> maxAttachmentsSpinner;
+    @FXML private Spinner<Integer> maxAttachmentMbSpinner;
+    @FXML private Spinner<Integer> maxAttachmentTextSpinner;
     @FXML private TextArea pinnedArea;
     @FXML private TextField sampleField;
     @FXML private TextArea previewArea;
@@ -52,6 +55,9 @@ public class ContextSectionController implements SettingsSection {
     public void load(HarnessSettings s) {
         toggles.forEach((id, box) -> box.setSelected(!s.context.disabledContributors.contains(id)));
         SettingsSection.intSpinner(historySpinner, 1, 500, s.context.maxHistoryMessages);
+        SettingsSection.intSpinner(maxAttachmentsSpinner, 1, 50, s.context.maxAttachments);
+        SettingsSection.intSpinner(maxAttachmentMbSpinner, 1, 200, s.context.maxAttachmentMb);
+        SettingsSection.intSpinner(maxAttachmentTextSpinner, 1_000, 2_000_000, s.context.maxAttachmentTextChars);
         pinnedArea.setText(s.context.pinnedContext);
         previewArea.clear();
     }
@@ -65,6 +71,9 @@ public class ContextSectionController implements SettingsSection {
             }
         });
         s.context.maxHistoryMessages = SettingsSection.spinnerValue(historySpinner);
+        s.context.maxAttachments = SettingsSection.spinnerValue(maxAttachmentsSpinner);
+        s.context.maxAttachmentMb = SettingsSection.spinnerValue(maxAttachmentMbSpinner);
+        s.context.maxAttachmentTextChars = SettingsSection.spinnerValue(maxAttachmentTextSpinner);
         s.context.pinnedContext = pinnedArea.getText();
     }
 
@@ -74,7 +83,7 @@ public class ContextSectionController implements SettingsSection {
         List<ChatMessage> context = builder.build(draft, List.of(ChatMessage.user(sampleField.getText())));
         StringBuilder sb = new StringBuilder();
         for (ChatMessage m : context) {
-            sb.append("=== ").append(m.role()).append(" ===\n").append(m.content()).append("\n\n");
+            sb.append("=== ").append(m.role()).append(" ===\n").append(m.contentForModel()).append("\n\n");
         }
         previewArea.setText(sb.toString());
     }

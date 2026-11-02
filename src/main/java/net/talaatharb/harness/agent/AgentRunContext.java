@@ -9,6 +9,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import net.talaatharb.harness.config.HarnessSettings;
+import net.talaatharb.harness.llm.Attachment;
 import net.talaatharb.harness.llm.ChatMessage;
 import net.talaatharb.harness.llm.ModelReply;
 import net.talaatharb.harness.tools.ToolCall;
@@ -19,6 +20,7 @@ public class AgentRunContext {
     private final String runId = UUID.randomUUID().toString().substring(0, 8);
     private final Instant startedAt = Instant.now();
     private final String userMessage;
+    private final List<Attachment> attachments;
     private final HarnessSettings settings;
     private final AtomicBoolean cancelled;
     private final Map<String, Integer> toolCallCounts = new HashMap<>();
@@ -33,8 +35,10 @@ public class AgentRunContext {
     private Throwable lastError;
     private volatile String abortReason;
 
-    AgentRunContext(String userMessage, HarnessSettings settings, AtomicBoolean cancelled) {
+    AgentRunContext(String userMessage, List<Attachment> attachments, HarnessSettings settings,
+            AtomicBoolean cancelled) {
         this.userMessage = userMessage;
+        this.attachments = attachments == null ? List.of() : List.copyOf(attachments);
         this.settings = settings;
         this.cancelled = cancelled;
     }
@@ -53,6 +57,11 @@ public class AgentRunContext {
 
     public String userMessage() {
         return userMessage;
+    }
+
+    /** Files attached to the user message (as given; guardrails may modify the copies in the transcript). */
+    public List<Attachment> attachments() {
+        return attachments;
     }
 
     public HarnessSettings settings() {

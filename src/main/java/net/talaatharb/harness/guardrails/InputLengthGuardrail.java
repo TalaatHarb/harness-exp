@@ -6,10 +6,12 @@ import java.util.Set;
 import net.talaatharb.harness.config.HarnessSettings;
 
 public class InputLengthGuardrail implements Guardrail {
+    public static final String ID = "input-length";
+
 
     @Override
     public String id() {
-        return "input-length";
+        return ID;
     }
 
     @Override

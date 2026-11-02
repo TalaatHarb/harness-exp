@@ -17,6 +17,7 @@
         <jackson.version>2.21.0</jackson.version>
         <ollama4j.version>1.1.7</ollama4j.version>
         <mapdb.version>3.1.0</mapdb.version>
+        <pdfbox.version>3.0.5</pdfbox.version>
     </properties>
 
     <dependencies>
@@ -33,6 +34,12 @@
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-fxml</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
+        <!-- Playback of audio attachments -->
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-media</artifactId>
             <version>${javafx.version}</version>
         </dependency>
 
@@ -60,6 +67,13 @@
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
             <version>${jackson.version}</version>
+        </dependency>
+
+        <!-- Text extraction from PDF attachments -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>${pdfbox.version}</version>
         </dependency>
 
         <!-- Conversation history -->

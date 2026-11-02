@@ -1,5 +1,6 @@
 package net.talaatharb.harness.ui;
 
+import java.util.List;
 import java.util.function.Supplier;
 
 import org.slf4j.Logger;
@@ -20,6 +21,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.util.Duration;
+import net.talaatharb.harness.llm.Attachment;
 
 /** Small factory for chat bubbles. */
 public final class ChatBubbles {
@@ -31,12 +33,23 @@ public final class ChatBubbles {
     }
 
     public static Node user(String text) {
-        Label bubble = textLabel(text, "bubble", "bubble-user");
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox row = new HBox(spacer, bubble);
-        row.setAlignment(Pos.CENTER_RIGHT);
-        VBox box = new VBox(2, row, actionBar(Pos.CENTER_RIGHT, copyButton(() -> text)));
+        return user(text, List.of());
+    }
+
+    public static Node user(String text, List<Attachment> attachments) {
+        VBox box = new VBox(2);
+        if (!attachments.isEmpty()) {
+            box.getChildren().add(AttachmentViews.gallery(attachments, Pos.CENTER_RIGHT));
+        }
+        if (text != null && !text.isBlank()) {
+            Label bubble = textLabel(text, "bubble", "bubble-user");
+            Region spacer = new Region();
+            HBox.setHgrow(spacer, Priority.ALWAYS);
+            HBox row = new HBox(spacer, bubble);
+            row.setAlignment(Pos.CENTER_RIGHT);
+            box.getChildren().add(row);
+        }
+        box.getChildren().add(actionBar(Pos.CENTER_RIGHT, copyButton(() -> text)));
         box.getStyleClass().add("user-turn");
         return box;
     }

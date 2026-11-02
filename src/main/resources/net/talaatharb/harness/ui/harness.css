@@ -43,6 +43,36 @@
     -fx-border-color: #dde1e6 transparent transparent transparent;
 }
 
+.attachment-chip {
+    -fx-background-color: #eef2ff;
+    -fx-border-color: #c7d2fe;
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-padding: 2 4 2 8;
+}
+
+.attachment-remove {
+    -fx-background-color: transparent;
+    -fx-padding: 0 4 0 4;
+    -fx-font-size: 11px;
+    -fx-cursor: hand;
+}
+
+.attachment-remove:hover {
+    -fx-background-color: #c7d2fe;
+    -fx-background-radius: 8;
+}
+
+.attachment-gallery {
+    -fx-padding: 0 0 2 0;
+}
+
+.drop-target {
+    -fx-border-color: #2563eb;
+    -fx-border-width: 2;
+    -fx-border-style: dashed;
+}
+
 .bubble {
     -fx-padding: 8 12 8 12;
     -fx-background-radius: 12;

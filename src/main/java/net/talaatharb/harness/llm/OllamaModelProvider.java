@@ -71,7 +71,12 @@ public class OllamaModelProvider implements ModelProvider {
         long start = System.currentTimeMillis();
         List<OllamaChatMessage> messages = new ArrayList<>();
         for (ChatMessage m : request.messages()) {
-            messages.add(new OllamaChatMessage(toOllamaRole(m.role()), m.content()));
+            OllamaChatMessage message = new OllamaChatMessage(toOllamaRole(m.role()), m.contentForModel());
+            List<byte[]> images = m.images();
+            if (!images.isEmpty()) {
+                message.setImages(new ArrayList<>(images));
+            }
+            messages.add(message);
         }
         OllamaChatRequest chatRequest = OllamaChatRequest.builder()
                 .withModel(request.model())

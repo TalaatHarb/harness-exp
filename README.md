@@ -24,7 +24,7 @@ separate **⚙ Harness** settings window, one tab per harness concern.
 | Model | Provider, local (`http://localhost:11434`) or cloud (`https://ollama.com` + API key), model, timeout, streaming | `llm` |
 | System prompt | Template with `{{date}}`, `{{time}}`, `{{model}}`, `{{os}}`, `{{user}}` variables | `prompt` |
 | Skills | Edits the skills folder (`~/.harness-exp/skills/<id>/SKILL.md`): new / save / delete / revert, plus **⟳ Refresh** to pick up outside edits or agent-created skills. Skills are injected always or only when trigger words match | `skills` folder |
-| Context builder | Ordered `ContextContributor` pipeline (toggleable), history window, pinned context | `context` |
+| Context builder | Ordered `ContextContributor` pipeline (toggleable), history window, pinned context, attachment limits | `context` |
 | Tools + MCP | Built-in tools, enable/disable, output cap, MCP server definitions (stdio/http) | `tools` |
 | Agent loop | Iteration/tool-call/duration/repeat/error limits (clamped by hard ceilings in `AgentLoopLimits`) and `HookPoint`s | `agent` |
 | Guardrails | Input/tool-call/output guardrails: length limit, blocked terms, secret redaction | `guardrails` |
@@ -103,6 +103,43 @@ When asked to review code, list bugs first, then risks, then style nits.
   Files that can't be read are skipped and listed there.
 - The agent can add or update skills with the `create_skill` tool (`name`, `description`, `triggers`,
   `instructions`). A skill with the same name is replaced. The tool is SENSITIVE and needs approval on every call.
+
+## Attachments
+
+Attach files with **📎**, by dropping them on the window, or by pasting copied files (Ctrl+V). They appear as chips
+above the input box (✕ removes one), and you can send a message with only attachments. Files are loaded in package
+`attachments` and stored with the message, so they show up again when you reopen a conversation or regenerate a
+reply.
+
+| Type | Extensions | Sent to the model as |
+|---|---|---|
+| Markdown / text | md, markdown, txt, log, csv, json, yaml, yml, xml | Text inside `<attachment name=… type=…>` |
+| PDF | pdf | Text extracted with PDFBox. Scanned PDFs with no text layer are rejected |
+| Pictures | png, jpg, jpeg, gif, bmp, webp | Images in the Ollama request. You need a vision model such as `llava`, `qwen2.5vl` or `gemma3` |
+| Audio | mp3, wav, m4a, aac, aif(f), ogg, flac | A note only, because Ollama has no audio input. You can play the file in the chat with ▶ |
+
+The limits are set in the **Context builder** section: files per message, MB per file, and characters of text kept
+per file (longer text is cut). Attachment text goes through the input guardrails, so blocked terms block the message,
+but the message-length limit doesn't apply to attachments. Click a chip or thumbnail to view the file's text or
+the full-size image.
+
+## Export / import
+
+**Export…** and **Import…** in the Harness window move the whole setup between machines as a single JSON file
+(`{"format":"harness-exp/settings","version":1,…}`, class `config.SettingsTransfer`).
+
+- **Export** writes the settings as currently shown in the window, including unsaved edits: model, system prompt,
+  context, tools and MCP, agent loop, guardrails, approval, reply and storage. You can also include the skills
+  folder and the dynamic tools' source code. The API key is left out unless you tick it.
+- **Import** accepts an export or a plain `settings.json`, and applies immediately. Each option can be ticked or
+  unticked:
+  - keep your current API key (on by default);
+  - keep your current storage folders (on by default);
+  - import skills (same-name skills are replaced);
+  - import dynamic tools. This is off by default because the tools are compiled and run as code.
+
+  Items that fail are listed in the import report and the rest are still imported.
+
 ## Running
 
 Requirements: Java 17+, Maven, and [Ollama](https://ollama.com) running locally (or an ollama.com API key).

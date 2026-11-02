@@ -31,6 +31,7 @@ import net.talaatharb.harness.guardrails.BlockedTermsGuardrail;
 import net.talaatharb.harness.guardrails.GuardrailService;
 import net.talaatharb.harness.guardrails.InputLengthGuardrail;
 import net.talaatharb.harness.guardrails.SecretRedactionGuardrail;
+import net.talaatharb.harness.llm.Attachment;
 import net.talaatharb.harness.llm.ChatMessage;
 import net.talaatharb.harness.llm.ModelProvider;
 import net.talaatharb.harness.llm.ModelProviderRegistry;
@@ -202,6 +203,38 @@ class AgentLoopTest {
 
         assertEquals(AgentRunResult.Status.BLOCKED, result.status());
         assertTrue(provider.requests.isEmpty());
+    }
+
+    @Test
+    void attachmentsReachTheModelAndAreCheckedByGuardrails() {
+        ScriptedProvider provider = ScriptedProvider.of("Got it.");
+        AgentLoop loop = loop(provider);
+        update(s -> s.guardrails.maxInputChars = 10);
+        Attachment notes = new Attachment("notes.md", "text/markdown", Attachment.Kind.TEXT, 30,
+                "a long attachment beyond the message limit", null, false);
+        Attachment pic = new Attachment("pic.png", "image/png", Attachment.Kind.IMAGE, 2, null,
+                java.util.Base64.getEncoder().encodeToString(new byte[] { 1, 2 }), false);
+        Conversation conversation = new Conversation();
+
+        AgentRunResult result = loop.run("", List.of(notes, pic), conversation, new AgentListener() {
+        }, new AtomicBoolean());
+
+        assertEquals(AgentRunResult.Status.COMPLETED, result.status());
+        ChatMessage sent = provider.requests.get(0).messages().stream().filter(m -> m.role() == Role.USER)
+                .reduce((a, b) -> b).orElseThrow();
+        assertEquals(List.of(notes, pic), sent.attachments());
+        assertTrue(sent.contentForModel().contains("beyond the message limit"));
+        assertEquals(1, sent.images().size());
+        assertEquals(2, conversation.snapshot().get(0).attachments().size());
+
+        ScriptedProvider blocked = ScriptedProvider.of("never");
+        AgentLoop loop2 = loop(blocked);
+        update(s -> s.guardrails.blockedTerms.add("beyond"));
+        AgentRunResult r2 = loop2.run("read this", List.of(notes), new Conversation(), new AgentListener() {
+        }, new AtomicBoolean());
+        assertEquals(AgentRunResult.Status.BLOCKED, r2.status());
+        assertTrue(r2.reason().contains("notes.md"));
+        assertTrue(blocked.requests.isEmpty());
     }
 
     @Test

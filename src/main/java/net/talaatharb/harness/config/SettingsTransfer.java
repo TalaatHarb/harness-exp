@@ -1,0 +1,227 @@
+package net.talaatharb.harness.config;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.inject.Inject;
+import com.google.inject.Provider;
+import com.google.inject.Singleton;
+
+import net.talaatharb.harness.skills.SkillDefinition;
+import net.talaatharb.harness.skills.SkillRepository;
+import net.talaatharb.harness.tools.Tool;
+import net.talaatharb.harness.tools.dynamic.DynamicToolException;
+import net.talaatharb.harness.tools.dynamic.DynamicToolRegistry;
+import net.talaatharb.harness.tools.dynamic.DynamicToolSpec;
+
+/** Exports/imports the whole harness setup (settings, skills, dynamic tools) as a single JSON file. */
+@Singleton
+public class SettingsTransfer {
+    private static final Logger LOG = LoggerFactory.getLogger(SettingsTransfer.class);
+
+    /** What to put in an exported file. The API key is a secret, so it is left out unless asked for. */
+    public record ExportOptions(boolean skills, boolean dynamicTools, boolean apiKey) {
+        public static ExportOptions defaults() {
+            return new ExportOptions(true, true, false);
+        }
+    }
+
+    /**
+     * What to take from an imported file. Dynamic tools are off by default because importing one compiles and runs
+     * code from the file.
+     */
+    public record ImportOptions(boolean settings, boolean keepApiKey, boolean keepStorage, boolean skills,
+            boolean dynamicTools) {
+        public static ImportOptions defaults() {
+            return new ImportOptions(true, true, true, true, false);
+        }
+    }
+
+    public record ImportReport(List<String> applied, List<String> errors) {
+        public String summary() {
+            StringBuilder sb = new StringBuilder();
+            applied.forEach(a -> sb.append("✔ ").append(a).append('\n'));
+            errors.forEach(e -> sb.append("✖ ").append(e).append('\n'));
+            return sb.isEmpty() ? "Nothing was imported." : sb.toString().strip();
+        }
+    }
+
+    private final SettingsStore store;
+    private final SkillRepository skills;
+    private final DynamicToolRegistry dynamicTools;
+    private final Provider<Set<Tool>> builtins;
+
+    @Inject
+    public SettingsTransfer(SettingsStore store, SkillRepository skills, DynamicToolRegistry dynamicTools,
+            Provider<Set<Tool>> builtins) {
+        this.store = store;
+        this.skills = skills;
+        this.dynamicTools = dynamicTools;
+        this.builtins = builtins;
+    }
+
+    private ObjectMapper mapper() {
+        return store.mapper();
+    }
+
+    /** Builds a bundle from {@code settings} (e.g. the unsaved draft in the settings window). */
+    public SettingsBundle export(HarnessSettings settings, ExportOptions options) {
+        SettingsBundle bundle = new SettingsBundle();
+        bundle.exportedAt = OffsetDateTime.now().toString();
+        bundle.settings = mapper().convertValue(settings, HarnessSettings.class);
+        bundle.settings.skills = null;
+        if (!options.apiKey()) {
+            bundle.settings.model.apiKey = "";
+        }
+        if (options.skills()) {
+            for (SkillDefinition skill : skills.skills()) {
+                SkillDefinition copy = skill.copy();
+                copy.id = null;
+                bundle.skills.add(copy);
+            }
+        }
+        if (options.dynamicTools()) {
+            dynamicTools.tools().stream().map(Tool::name).sorted(Comparator.naturalOrder())
+                    .forEach(name -> dynamicTools.spec(name).ifPresent(bundle.dynamicTools::add));
+        }
+        return bundle;
+    }
+
+    public void write(SettingsBundle bundle, Path file) throws IOException {
+        Path parent = file.toAbsolutePath().getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        mapper().writeValue(file.toFile(), bundle);
+        LOG.info("Exported harness settings to {} ({} skills, {} dynamic tools)", file, bundle.skills.size(),
+                bundle.dynamicTools.size());
+    }
+
+    /** Reads an exported bundle; a plain {@code settings.json} is accepted too. */
+    public SettingsBundle read(Path file) throws IOException {
+        JsonNode root;
+        try {
+            root = mapper().readTree(file.toFile());
+        } catch (IOException e) {
+            throw new IOException("Not a valid JSON file: " + e.getMessage(), e);
+        }
+        if (root == null || !root.isObject()) {
+            throw new IOException("Expected a JSON object");
+        }
+        SettingsBundle bundle;
+        if (root.has("format")) {
+            String format = root.path("format").asText();
+            if (!SettingsBundle.FORMAT.equals(format)) {
+                throw new IOException("Unknown format '" + format + "' (expected " + SettingsBundle.FORMAT + ")");
+            }
+            int version = root.path("version").asInt(0);
+            if (version < 1 || version > SettingsBundle.VERSION) {
+                throw new IOException("Unsupported version " + version + " (this app reads up to "
+                        + SettingsBundle.VERSION + ")");
+            }
+            bundle = mapper().treeToValue(root, SettingsBundle.class);
+        } else if (looksLikeSettings((ObjectNode) root)) {
+            bundle = new SettingsBundle();
+            bundle.settings = mapper().treeToValue(root, HarnessSettings.class);
+        } else {
+            throw new IOException("This is neither a harness export nor a settings.json file");
+        }
+        if (bundle.settings == null) {
+            bundle.settings = new HarnessSettings();
+        }
+        if (bundle.skills == null) {
+            bundle.skills = new ArrayList<>();
+        }
+        if (bundle.dynamicTools == null) {
+            bundle.dynamicTools = new ArrayList<>();
+        }
+        // Legacy settings files kept skills inline.
+        if (bundle.settings.skills != null) {
+            bundle.skills.addAll(bundle.settings.skills);
+            bundle.settings.skills = null;
+        }
+        return bundle;
+    }
+
+    private static boolean looksLikeSettings(ObjectNode root) {
+        Set<String> known = Set.of("model", "systemPrompt", "skills", "context", "tools", "agentLoop", "guardrails",
+                "approval", "reply", "storage");
+        var names = root.fieldNames();
+        while (names.hasNext()) {
+            if (known.contains(names.next())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Applies the selected parts of {@code bundle}; one bad skill or tool doesn't stop the rest. */
+    public ImportReport apply(SettingsBundle bundle, ImportOptions options) {
+        List<String> applied = new ArrayList<>();
+        List<String> errors = new ArrayList<>();
+        if (options.settings()) {
+            HarnessSettings current = store.current();
+            HarnessSettings imported = mapper().convertValue(bundle.settings, HarnessSettings.class);
+            imported.skills = null;
+            if (options.keepApiKey()) {
+                imported.model.apiKey = current.model.apiKey;
+            }
+            if (options.keepStorage()) {
+                imported.storage = mapper().convertValue(current.storage, StorageSettings.class);
+            }
+            store.replace(imported);
+            applied.add("Settings (model, system prompt, context, tools, loop, guardrails, approval, reply"
+                    + (options.keepStorage() ? "" : ", storage") + ")");
+        }
+        if (options.skills()) {
+            int count = 0;
+            for (SkillDefinition skill : bundle.skills) {
+                String name = skill == null || skill.name == null ? "(unnamed)" : skill.name;
+                try {
+                    SkillDefinition copy = skill.copy();
+                    copy.id = null;
+                    skills.save(copy);
+                    count++;
+                } catch (IOException | RuntimeException e) {
+                    LOG.warn("Could not import skill '{}'", name, e);
+                    errors.add("Skill '" + name + "': " + e.getMessage());
+                }
+            }
+            if (count > 0) {
+                applied.add(count + " skill(s)");
+            }
+        }
+        if (options.dynamicTools()) {
+            Set<String> reserved = builtins.get().stream().map(Tool::name).collect(Collectors.toSet());
+            int count = 0;
+            for (DynamicToolSpec spec : bundle.dynamicTools) {
+                String name = spec == null || spec.name == null ? "(unnamed)" : spec.name;
+                try {
+                    dynamicTools.create(spec, reserved);
+                    count++;
+                } catch (DynamicToolException | RuntimeException e) {
+                    LOG.warn("Could not import dynamic tool '{}'", name, e);
+                    errors.add("Dynamic tool '" + name + "': " + e.getMessage());
+                }
+            }
+            if (count > 0) {
+                applied.add(count + " dynamic tool(s)");
+            }
+        }
+        LOG.info("Imported harness settings: applied={}, errors={}", applied, errors);
+        return new ImportReport(applied, errors);
+    }
+}

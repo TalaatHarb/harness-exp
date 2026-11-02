@@ -13,4 +13,10 @@ public class ContextSettings {
     public String pinnedContext = "";
     /** Ids of {@link ContextContributor}s the user switched off. */
     public Set<String> disabledContributors = new HashSet<>();
+    /** Most files per message. */
+    public int maxAttachments = 8;
+    /** Largest accepted attachment file. */
+    public int maxAttachmentMb = 20;
+    /** Text extracted from a markdown/text/PDF attachment is cut after this many characters. */
+    public int maxAttachmentTextChars = 60_000;
 }

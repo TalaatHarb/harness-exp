@@ -67,10 +67,25 @@ public class ConversationStore implements AutoCloseable {
         return persistent;
     }
 
+    /** Text of the first request, or the first attachment name when only files were sent. */
+    private static String firstRequest(ConversationRecord record) {
+        TurnRecord first = record.turns.get(0);
+        if (first.userText != null && !first.userText.isBlank()) {
+            return first.userText;
+        }
+        if (first.messageStart >= 0 && first.messageStart < record.messages.size()) {
+            var attachments = record.messages.get(first.messageStart).attachments();
+            if (!attachments.isEmpty()) {
+                return attachments.get(0).name();
+            }
+        }
+        return first.userText;
+    }
+
     public synchronized void save(ConversationRecord record) {
         record.updatedAt = Instant.now();
         if (record.title == null || record.title.isBlank()) {
-            record.title = record.turns.isEmpty() ? "Untitled" : ConversationRecord.titleFor(record.turns.get(0).userText);
+            record.title = record.turns.isEmpty() ? "Untitled" : ConversationRecord.titleFor(firstRequest(record));
         }
         try {
             conversations.put(record.id, mapper.writeValueAsString(record));
