@@ -30,6 +30,7 @@ import net.talaatharb.harness.ui.sections.ModelSectionController;
 import net.talaatharb.harness.ui.sections.ReplySectionController;
 import net.talaatharb.harness.ui.sections.SettingsSection;
 import net.talaatharb.harness.ui.sections.SkillsSectionController;
+import net.talaatharb.harness.ui.sections.SpeechSectionController;
 import net.talaatharb.harness.ui.sections.StorageSectionController;
 import net.talaatharb.harness.ui.sections.SystemPromptSectionController;
 import net.talaatharb.harness.ui.sections.ToolsSectionController;
@@ -51,6 +52,7 @@ public class SettingsController {
     @FXML private GuardrailsSectionController guardrailsSectionController;
     @FXML private ApprovalSectionController approvalSectionController;
     @FXML private ReplySectionController replySectionController;
+    @FXML private SpeechSectionController speechSectionController;
     @FXML private StorageSectionController storageSectionController;
 
     @Inject
@@ -64,7 +66,7 @@ public class SettingsController {
         sections = List.of(modelSectionController, systemPromptSectionController, skillsSectionController,
                 contextSectionController, toolsSectionController, agentLoopSectionController,
                 guardrailsSectionController, approvalSectionController, replySectionController,
-                storageSectionController);
+                speechSectionController, storageSectionController);
         sections.forEach(s -> s.setDraftSource(this::collect));
         load(store.copy());
     }

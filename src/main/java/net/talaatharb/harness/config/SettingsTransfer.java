@@ -158,7 +158,7 @@ public class SettingsTransfer {
 
     private static boolean looksLikeSettings(ObjectNode root) {
         Set<String> known = Set.of("model", "systemPrompt", "skills", "context", "tools", "agentLoop", "guardrails",
-                "approval", "reply", "storage");
+                "approval", "reply", "storage", "speech");
         var names = root.fieldNames();
         while (names.hasNext()) {
             if (known.contains(names.next())) {
@@ -183,7 +183,7 @@ public class SettingsTransfer {
                 imported.storage = mapper().convertValue(current.storage, StorageSettings.class);
             }
             store.replace(imported);
-            applied.add("Settings (model, system prompt, context, tools, loop, guardrails, approval, reply"
+            applied.add("Settings (model, system prompt, context, tools, loop, guardrails, approval, reply, speech"
                     + (options.keepStorage() ? "" : ", storage") + ")");
         }
         if (options.skills()) {

@@ -36,7 +36,7 @@
             <Region HBox.hgrow="ALWAYS"/>
             <Button text="New chat" onAction="#onNewChat"/>
             <Button text="⚙ Harness" onAction="#onOpenSettings">
-                <tooltip><Tooltip text="System prompt, skills, context, tools, loop limits, guardrails, approval, reply"/></tooltip>
+                <tooltip><Tooltip text="System prompt, skills, context, tools, loop limits, guardrails, approval, reply, speech"/></tooltip>
             </Button>
         </HBox>
     </top>
@@ -70,12 +70,16 @@
         <VBox fx:id="composer" spacing="6" styleClass="composer">
             <padding><Insets top="8" right="12" bottom="12" left="12"/></padding>
             <FlowPane fx:id="attachmentsBar" hgap="6" vgap="6" visible="false" managed="false"/>
+            <Label fx:id="voiceStatus" styleClass="voice-status"/>
             <HBox spacing="8" alignment="BOTTOM_CENTER">
                 <Button fx:id="attachButton" text="📎" onAction="#onAttach">
                     <tooltip><Tooltip text="Attach files: markdown/text, PDF, pictures, audio (or drop them here)"/></tooltip>
                 </Button>
+                <Button fx:id="micButton" text="🎤">
+                    <tooltip><Tooltip text="Talk instead of typing (Ctrl+M). Press again to stop, Esc to cancel."/></tooltip>
+                </Button>
                 <TextArea fx:id="inputArea" HBox.hgrow="ALWAYS" prefRowCount="3" wrapText="true"
-                          promptText="Message the agent (Enter to send, Shift+Enter for a new line, drop files to attach)"/>
+                          promptText="Message the agent (Enter to send, Shift+Enter for a new line, Ctrl+M to talk, drop files to attach)"/>
                 <VBox spacing="6">
                     <Button fx:id="sendButton" text="Send" defaultButton="false" onAction="#onSend" maxWidth="Infinity"/>
                     <Button fx:id="stopButton" text="Stop" onAction="#onStop" disable="true" maxWidth="Infinity"/>

@@ -16,6 +16,16 @@ public interface ModelProvider {
 
     String displayName();
 
+    /** Base URL used when the settings field is blank or when switching to this provider. */
+    default String defaultBaseUrl() {
+        return "";
+    }
+
+    /** Environment variable read when the API key field is blank ({@code null} if none). */
+    default String apiKeyEnvVar() {
+        return null;
+    }
+
     boolean ping(ModelSettings config);
 
     List<String> listModels(ModelSettings config) throws ModelProviderException;

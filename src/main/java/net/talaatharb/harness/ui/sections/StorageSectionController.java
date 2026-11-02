@@ -28,6 +28,8 @@ public class StorageSectionController implements SettingsSection {
     @FXML private TextField skillsField;
     @FXML private TextField toolsField;
     @FXML private TextField historyField;
+    @FXML private TextField modelsField;
+    @FXML private Label modelsInUse;
     @FXML private Label skillsInUse;
     @FXML private Label toolsInUse;
     @FXML private Label historyInUse;
@@ -45,6 +47,9 @@ public class StorageSectionController implements SettingsSection {
         skillsField.setPromptText(defaults.skillsDir() + "  (default)");
         toolsField.setPromptText(defaults.dynamicToolsDir() + "  (default)");
         historyField.setPromptText(defaults.historyDb() + "  (default)");
+        modelsField.setPromptText(defaults.modelsDir() + "  (default)");
+        modelsInUse.setText("In use: " + inUse.modelsDir());
+        modelsField.textProperty().addListener((o, a, b) -> updateRestartNotice());
         skillsInUse.setText("In use: " + inUse.skillsDir());
         toolsInUse.setText("In use: " + inUse.dynamicToolsDir());
         historyInUse.setText("In use: " + inUse.historyDb());
@@ -59,6 +64,7 @@ public class StorageSectionController implements SettingsSection {
         skillsField.setText(s.skillsDir);
         toolsField.setText(s.dynamicToolsDir);
         historyField.setText(s.historyDb);
+        modelsField.setText(s.modelsDir);
         updateRestartNotice();
     }
 
@@ -70,6 +76,7 @@ public class StorageSectionController implements SettingsSection {
         settings.storage.skillsDir = skillsField.getText().strip();
         settings.storage.dynamicToolsDir = toolsField.getText().strip();
         settings.storage.historyDb = historyField.getText().strip();
+        settings.storage.modelsDir = modelsField.getText().strip();
     }
 
     private StoragePaths pending() {
@@ -77,6 +84,7 @@ public class StorageSectionController implements SettingsSection {
         s.skillsDir = skillsField.getText();
         s.dynamicToolsDir = toolsField.getText();
         s.historyDb = historyField.getText();
+        s.modelsDir = modelsField.getText();
         return StoragePaths.resolve(settingsPath, s);
     }
 
@@ -94,6 +102,11 @@ public class StorageSectionController implements SettingsSection {
     @FXML
     private void onBrowseTools() {
         chooseFolder(toolsField, "Dynamic tools folder", pending().dynamicToolsDir());
+    }
+
+    @FXML
+    private void onBrowseModels() {
+        chooseFolder(modelsField, "Local models folder", pending().modelsDir());
     }
 
     @FXML
@@ -119,6 +132,7 @@ public class StorageSectionController implements SettingsSection {
         skillsField.clear();
         toolsField.clear();
         historyField.clear();
+        modelsField.clear();
     }
 
     private void chooseFolder(TextField field, String title, Path current) {

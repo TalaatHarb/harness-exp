@@ -13,7 +13,8 @@ import com.fasterxml.jackson.annotation.JsonInclude;
  * @param mimeType  best-effort MIME type
  * @param kind      how the harness hands it to the model
  * @param size      original size in bytes
- * @param text      extracted text ({@link Kind#TEXT}, {@link Kind#PDF}); {@code null} otherwise
+ * @param text      extracted text ({@link Kind#TEXT}, {@link Kind#PDF}) or speech transcript ({@link Kind#AUDIO});
+ *                  {@code null} otherwise
  * @param data      base64 content ({@link Kind#IMAGE}, {@link Kind#AUDIO}); {@code null} otherwise
  * @param truncated whether {@code text} was cut to the configured limit
  */
@@ -28,7 +29,7 @@ public record Attachment(String name, String mimeType, Kind kind, long size, Str
         PDF,
         /** Picture: sent as an image to vision models. */
         IMAGE,
-        /** Audio: kept with the chat and playable; models only get a note (no audio input in the chat API). */
+        /** Audio: kept with the chat and playable; models get its speech transcript when available, else a note. */
         AUDIO
     }
 
@@ -45,6 +46,12 @@ public record Attachment(String name, String mimeType, Kind kind, long size, Str
 
     public Attachment withText(String newText) {
         return new Attachment(name, mimeType, kind, size, newText, data, truncated);
+    }
+
+    /** Sets {@code text}, cutting it to {@code maxChars}. */
+    public Attachment withText(String newText, int maxChars) {
+        boolean cut = newText != null && newText.length() > maxChars;
+        return new Attachment(name, mimeType, kind, size, cut ? newText.substring(0, maxChars) : newText, data, cut);
     }
 
     /** Human-readable size, e.g. {@code 1.2 MB}. */

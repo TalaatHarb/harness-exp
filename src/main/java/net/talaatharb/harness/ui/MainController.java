@@ -67,6 +67,7 @@ import net.talaatharb.harness.llm.Attachment;
 import net.talaatharb.harness.llm.ChatMessage;
 import net.talaatharb.harness.llm.Role;
 import net.talaatharb.harness.llm.ModelProviderRegistry;
+import net.talaatharb.harness.speech.SpeechToText;
 import net.talaatharb.harness.tools.ToolCall;
 import net.talaatharb.harness.tools.ToolResult;
 
@@ -102,6 +103,8 @@ public class MainController {
     private final IntegerProperty loadingAttachments = new SimpleIntegerProperty();
     private Future<?> running;
     private AtomicBoolean cancelFlag;
+    private final SpeechToText speech;
+    private VoiceInput voice;
 
     @FXML private ComboBox<String> modelCombo;
     @FXML private Label statusLabel;
@@ -112,6 +115,8 @@ public class MainController {
     @FXML private VBox composer;
     @FXML private FlowPane attachmentsBar;
     @FXML private Button attachButton;
+    @FXML private Button micButton;
+    @FXML private Label voiceStatus;
     @FXML private TextArea inputArea;
     @FXML private Button sendButton;
     @FXML private Button stopButton;
@@ -139,7 +144,8 @@ public class MainController {
 
     @Inject
     public MainController(AgentLoop agentLoop, SettingsStore store, ModelProviderRegistry providers,
-            SettingsWindow settingsWindow, ConversationStore history) {
+            SettingsWindow settingsWindow, ConversationStore history, SpeechToText speech) {
+        this.speech = speech;
         this.agentLoop = agentLoop;
         this.store = store;
         this.providers = providers;
@@ -165,6 +171,7 @@ public class MainController {
             }
         }));
         initHistory();
+        initVoice();
         initAttachments();
         onRefreshModels();
     }
@@ -413,7 +420,7 @@ public class MainController {
     @FXML
     private void onSend() {
         String text = inputArea.getText();
-        if (isRunning() || loadingAttachments.get() > 0 || ((text == null || text.isBlank()) && pending.isEmpty())) {
+        if (isRunning() || loadingAttachments.get() > 0 || voice.busyProperty().get() || ((text == null || text.isBlank()) && pending.isEmpty())) {
             return;
         }
         List<Attachment> attachments = List.copyOf(pending);
@@ -539,12 +546,28 @@ public class MainController {
         }, cancel);
     }
 
+    // ---- voice input -------------------------------------------------------------------------------------------
+
+    private void initVoice() {
+        voice = new VoiceInput(speech, () -> store.current().speech, micButton, voiceStatus, inputArea, this::onSend,
+                this::showError);
+        voice.installShortcuts(root);
+        store.addListener(() -> Platform.runLater(voice::refresh));
+    }
+
+    private void showError(String message) {
+        Alert alert = new Alert(Alert.AlertType.ERROR, message, ButtonType.OK);
+        alert.initOwner(root.getScene().getWindow());
+        alert.setHeaderText(null);
+        alert.show();
+    }
+
     // ---- attachments -------------------------------------------------------------------------------------------
 
     private void initAttachments() {
         sendButton.disableProperty().bind(Bindings.createBooleanBinding(
-                () -> !stopButton.isDisable() || loadingAttachments.get() > 0, stopButton.disableProperty(),
-                loadingAttachments));
+                () -> !stopButton.isDisable() || loadingAttachments.get() > 0 || voice.busyProperty().get(),
+                stopButton.disableProperty(), loadingAttachments, voice.busyProperty()));
         pending.addListener((javafx.collections.ListChangeListener<Attachment>) c -> renderPending());
         root.setOnDragOver(e -> {
             if (e.getDragboard().hasFiles() && e.getDragboard().getFiles().stream()
@@ -617,7 +640,9 @@ public class MainController {
             loadingAttachments.set(loadingAttachments.get() + 1);
             CompletableFuture.supplyAsync(() -> {
                 try {
-                    return AttachmentLoader.load(file.toPath(), limits);
+                    Attachment loaded = AttachmentLoader.load(file.toPath(), limits);
+                    return voice.transcribeAttachment(loaded, limits.maxAttachmentTextChars,
+                            problem -> Platform.runLater(() -> showError(problem)));
                 } catch (IOException e) {
                     throw new java.io.UncheckedIOException(e);
                 }
@@ -677,6 +702,7 @@ public class MainController {
 
     public void shutdown() {
         onStop();
+        voice.shutdown();
         executor.shutdownNow();
     }
 }

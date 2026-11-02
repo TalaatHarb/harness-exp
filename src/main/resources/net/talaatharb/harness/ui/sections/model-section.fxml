@@ -8,6 +8,7 @@
 <?import javafx.scene.control.PasswordField?>
 <?import javafx.scene.control.Spinner?>
 <?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.Tooltip?>
 <?import javafx.scene.layout.GridPane?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
@@ -17,24 +18,29 @@
     <padding><Insets top="16" right="16" bottom="16" left="16"/></padding>
     <Label text="Model provider" styleClass="section-title"/>
     <Label wrapText="true" styleClass="section-help"
-           text="Local Ollama needs no key. For Ollama cloud use https://ollama.com and an API key. Other providers can be added by binding a ModelProvider in AppModule."/>
+           text="ollama: local Ollama needs no key; for Ollama cloud use https://ollama.com and an API key. openai: OpenAI or any OpenAI-compatible endpoint. anthropic: Claude. A blank API key falls back to the provider's environment variable. More providers can be added by binding a ModelProvider in AppModule."/>
     <GridPane hgap="10" vgap="8">
         <Label text="Provider" GridPane.rowIndex="0"/>
         <ComboBox fx:id="providerCombo" prefWidth="260" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
         <Label text="Base URL" GridPane.rowIndex="1"/>
         <HBox spacing="6" GridPane.rowIndex="1" GridPane.columnIndex="1">
             <TextField fx:id="baseUrlField" prefWidth="320"/>
-            <Button text="Local" onAction="#onLocal"/>
-            <Button text="Cloud" onAction="#onCloud"/>
+            <Button fx:id="localButton" text="Local" onAction="#onLocal"/>
+            <Button fx:id="cloudButton" text="Cloud" onAction="#onCloud"/>
+            <Button fx:id="defaultUrlButton" text="Default" onAction="#onDefaultUrl"/>
         </HBox>
         <Label text="API key" GridPane.rowIndex="2"/>
-        <PasswordField fx:id="apiKeyField" promptText="optional (required for cloud)" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+        <PasswordField fx:id="apiKeyField" prefWidth="320" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
         <Label text="Model" GridPane.rowIndex="3"/>
         <ComboBox fx:id="modelCombo" editable="true" prefWidth="320" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
         <Label text="Timeout (s)" GridPane.rowIndex="4"/>
         <Spinner fx:id="timeoutSpinner" prefWidth="120" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
         <Label text="Streaming" GridPane.rowIndex="5"/>
         <CheckBox fx:id="streamingCheck" text="Stream tokens into the chat" GridPane.rowIndex="5" GridPane.columnIndex="1"/>
+        <Label text="Max output tokens" GridPane.rowIndex="6"/>
+        <Spinner fx:id="maxTokensSpinner" prefWidth="120" GridPane.rowIndex="6" GridPane.columnIndex="1">
+            <tooltip><Tooltip text="Reply length cap sent to Anthropic (required there; ignored by the other providers)"/></tooltip>
+        </Spinner>
     </GridPane>
     <HBox spacing="8" alignment="CENTER_LEFT">
         <Button text="Test connection &amp; list models" onAction="#onTest"/>

@@ -9,12 +9,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** The data locations in effect, resolved from {@link StorageSettings} once at startup. */
-public record StoragePaths(Path skillsDir, Path dynamicToolsDir, Path historyDb) {
+public record StoragePaths(Path skillsDir, Path dynamicToolsDir, Path historyDb, Path modelsDir) {
     private static final Logger LOG = LoggerFactory.getLogger(StoragePaths.class);
 
     public static final String SKILLS = "skills";
     public static final String DYNAMIC_TOOLS = "dynamic-tools";
     public static final String HISTORY_DB = "history.db";
+    public static final String MODELS = "models";
 
     public static StoragePaths resolve(Path settingsPath, StorageSettings storage) {
         Path base = settingsDir(settingsPath);
@@ -22,7 +23,8 @@ public record StoragePaths(Path skillsDir, Path dynamicToolsDir, Path historyDb)
         return new StoragePaths(
                 resolve(base, s.skillsDir, SKILLS),
                 resolve(base, s.dynamicToolsDir, DYNAMIC_TOOLS),
-                resolve(base, s.historyDb, HISTORY_DB));
+                resolve(base, s.historyDb, HISTORY_DB),
+                resolve(base, s.modelsDir, MODELS));
     }
 
     public static StoragePaths defaults(Path settingsPath) {

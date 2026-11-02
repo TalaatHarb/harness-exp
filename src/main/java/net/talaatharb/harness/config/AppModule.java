@@ -25,8 +25,12 @@ import net.talaatharb.harness.guardrails.SecretRedactionGuardrail;
 import net.talaatharb.harness.history.ConversationStore;
 import net.talaatharb.harness.skills.CreateSkillTool;
 import net.talaatharb.harness.skills.SkillRepository;
+import net.talaatharb.harness.llm.AnthropicModelProvider;
 import net.talaatharb.harness.llm.ModelProvider;
 import net.talaatharb.harness.llm.OllamaModelProvider;
+import net.talaatharb.harness.llm.OpenAiModelProvider;
+import net.talaatharb.harness.speech.SpeechToText;
+import net.talaatharb.harness.speech.WhistleSpeechToText;
 import net.talaatharb.harness.tools.Tool;
 import net.talaatharb.harness.tools.builtin.CurrentTimeTool;
 import net.talaatharb.harness.tools.builtin.ReadFileTool;
@@ -66,6 +70,8 @@ public class AppModule extends AbstractModule {
 
         Multibinder<ModelProvider> providers = Multibinder.newSetBinder(binder(), ModelProvider.class);
         providers.addBinding().to(OllamaModelProvider.class);
+        providers.addBinding().to(OpenAiModelProvider.class);
+        providers.addBinding().to(AnthropicModelProvider.class);
 
         Multibinder<Tool> tools = Multibinder.newSetBinder(binder(), Tool.class);
         tools.addBinding().to(CurrentTimeTool.class);
@@ -90,6 +96,8 @@ public class AppModule extends AbstractModule {
         Multibinder<AgentHook> hooks = Multibinder.newSetBinder(binder(), AgentHook.class);
         hooks.addBinding().to(LoggingHook.class);
 
+        bind(SpeechToText.class).to(WhistleSpeechToText.class);
+
         bindApprovalGateway();
     }
 
@@ -98,8 +106,8 @@ public class AppModule extends AbstractModule {
     @Singleton
     StoragePaths storagePaths(SettingsStore store) {
         StoragePaths paths = StoragePaths.resolve(settingsPath, store.current().storage);
-        LOG.info("Storage: skills={}, dynamic tools={}, history={}", paths.skillsDir(), paths.dynamicToolsDir(),
-                paths.historyDb());
+        LOG.info("Storage: skills={}, dynamic tools={}, history={}, models={}", paths.skillsDir(), paths.dynamicToolsDir(),
+                paths.historyDb(), paths.modelsDir());
         return paths;
     }
 
@@ -121,7 +129,14 @@ public class AppModule extends AbstractModule {
         return paths.historyDb();
     }
 
-    /** Overridable so headless tests can auto-approve. */    protected void bindApprovalGateway() {
+    @Provides
+    @Named(WhistleSpeechToText.MODELS_DIR)
+    Path modelsDir(StoragePaths paths) {
+        return paths.modelsDir();
+    }
+
+    /** Overridable so headless tests can auto-approve. */
+    protected void bindApprovalGateway() {
         bind(ApprovalGateway.class).to(DialogApprovalGateway.class);
     }
 }

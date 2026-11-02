@@ -64,9 +64,18 @@ public record ChatMessage(Role role, String content, String name,
                         .append(a.mimeType()).append("\"").append(a.truncated() ? " truncated=\"true\"" : "")
                         .append(">\n").append(a.text() == null ? "" : a.text()).append("\n</attachment>");
                 case IMAGE -> sb.append("[Image attached: ").append(a.name()).append("]");
-                case AUDIO -> sb.append("[Audio attached: ").append(a.name()).append(" (")
+                case AUDIO -> {
+                    if (a.text() != null) {
+                        sb.append("<attachment name=\"").append(a.name()).append("\" type=\"").append(a.mimeType())
+                                .append("\" content=\"speech transcript\"")
+                                .append(a.truncated() ? " truncated=\"true\"" : "").append(">\n").append(a.text())
+                                .append("\n</attachment>");
+                    } else {
+                        sb.append("[Audio attached: ").append(a.name()).append(" (")
                         .append(Attachment.formatSize(a.size())).append("). Its sound can't be sent to the model;")
                         .append(" ask the user for a transcript or summary if you need its content.]");
+                    }
+                }
             }
         }
         return sb.toString();

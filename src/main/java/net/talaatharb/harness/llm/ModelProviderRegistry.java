@@ -3,6 +3,7 @@ package net.talaatharb.harness.llm;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import com.google.inject.Inject;
@@ -20,6 +21,10 @@ public class ModelProviderRegistry {
 
     public Collection<ModelProvider> all() {
         return providers.values();
+    }
+
+    public Optional<ModelProvider> find(String id) {
+        return Optional.ofNullable(id == null ? null : providers.get(id));
     }
 
     public ModelProvider get(ModelSettings config) throws ModelProviderException {

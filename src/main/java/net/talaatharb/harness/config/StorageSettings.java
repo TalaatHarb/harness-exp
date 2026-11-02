@@ -14,4 +14,6 @@ public class StorageSettings {
     public String dynamicToolsDir = "";
     /** MapDB conversation history file. */
     public String historyDb = "";
+    /** Downloaded local models, e.g. the Whistle speech-to-text engine and model. */
+    public String modelsDir = "";
 }

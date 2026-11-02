@@ -37,11 +37,22 @@ public class OllamaModelProvider implements ModelProvider {
         return "Ollama (local / cloud)";
     }
 
+    @Override
+    public String defaultBaseUrl() {
+        return ModelSettings.LOCAL_OLLAMA_URL;
+    }
+
+    @Override
+    public String apiKeyEnvVar() {
+        return "OLLAMA_API_KEY";
+    }
+
     private static Ollama client(ModelSettings config) {
         Ollama ollama = new Ollama(config.baseUrl);
         ollama.setRequestTimeoutSeconds(config.requestTimeoutSeconds);
-        if (config.apiKey != null && !config.apiKey.isBlank()) {
-            ollama.setBearerAuth(config.apiKey.trim());
+        String key = HttpJson.apiKey(config, "OLLAMA_API_KEY");
+        if (!key.isEmpty()) {
+            ollama.setBearerAuth(key);
         }
         return ollama;
     }

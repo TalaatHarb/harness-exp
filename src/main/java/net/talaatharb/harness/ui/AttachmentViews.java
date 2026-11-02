@@ -54,6 +54,7 @@ public final class AttachmentViews {
     /** A compact chip; {@code onRemove} adds an ✕ button (composer), {@code null} for sent messages. */
     public static HBox chip(Attachment a, Runnable onRemove) {
         Label label = new Label(icon(a) + " " + a.name() + " · " + Attachment.formatSize(a.size())
+                + (a.kind() == Attachment.Kind.AUDIO && a.text() != null ? " · transcribed" : "")
                 + (a.truncated() ? " · truncated" : ""));
         label.setTooltip(new Tooltip(describe(a)));
         HBox chip = new HBox(4, label);
@@ -61,7 +62,8 @@ public final class AttachmentViews {
         chip.getStyleClass().add("attachment-chip");
         if (a.kind() == Attachment.Kind.AUDIO) {
             chip.getChildren().add(playButton(a));
-        } else {
+        }
+        if (a.kind() != Attachment.Kind.AUDIO || a.text() != null) {
             label.setCursor(Cursor.HAND);
             label.setOnMouseClicked(e -> open(a, chip));
         }
@@ -120,12 +122,13 @@ public final class AttachmentViews {
         String sent = switch (a.kind()) {
             case TEXT, PDF -> "Text is sent to the model" + (a.truncated() ? " (cut to the configured limit)" : "");
             case IMAGE -> "Sent as an image (needs a vision model)";
-            case AUDIO -> "The model only gets a note; it can't hear audio";
+            case AUDIO -> a.text() != null ? "The speech transcript is sent to the model (click to read it)"
+                    : "The model only gets a note; it can't hear audio";
         };
         return a.name() + "\n" + a.mimeType() + ", " + Attachment.formatSize(a.size()) + "\n" + sent;
     }
 
-    /** Opens an image or the extracted text in a separate window. */
+    /** Opens an image or the extracted text / transcript in a separate window. */
     static void open(Attachment a, Node owner) {
         Window window = owner.getScene() == null ? null : owner.getScene().getWindow();
         Node content;

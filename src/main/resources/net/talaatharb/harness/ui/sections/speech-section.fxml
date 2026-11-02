@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ProgressBar?>
+<?import javafx.scene.control.Spinner?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+      fx:controller="net.talaatharb.harness.ui.sections.SpeechSectionController" spacing="10" styleClass="section">
+    <padding><Insets top="16" right="16" bottom="16" left="16"/></padding>
+    <Label text="Speech" styleClass="section-title"/>
+    <Label wrapText="true" styleClass="section-help"
+           text="Talk instead of typing: press 🎤 or Ctrl+M to start recording, press again to stop (Esc cancels). Speech is transcribed on this machine with the Whistle model — audio never leaves your computer."/>
+    <CheckBox fx:id="dictationCheck" text="Enable voice input (🎤 button and Ctrl+M)"/>
+    <CheckBox fx:id="sendAfterCheck" text="Send the message right after dictation (otherwise the text is put in the input box to review)"/>
+    <CheckBox fx:id="transcribeCheck" text="Transcribe audio attachments so the model can read what was said"/>
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Label text="Language"/>
+        <ComboBox fx:id="languageCombo" prefWidth="110"/>
+        <Label text="Max recording (seconds)"/>
+        <Spinner fx:id="maxSecondsSpinner" editable="true" prefWidth="100"/>
+    </HBox>
+    <Label text="Engine" styleClass="section-subtitle"/>
+    <Label fx:id="engineLabel" wrapText="true"/>
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Button fx:id="downloadButton" text="Download model now" onAction="#onDownload"/>
+        <Label fx:id="statusLabel" wrapText="true"/>
+    </HBox>
+    <ProgressBar fx:id="downloadProgress" maxWidth="Infinity"/>
+    <Label wrapText="true" styleClass="section-help"
+           text="WAV and AIFF attachments are decoded directly. MP3, M4A, OGG, FLAC and AAC need ffmpeg on the PATH (or -Dharness.ffmpeg=&lt;path&gt;). The model is stored in the models folder chosen on the Storage tab."/>
+</VBox>

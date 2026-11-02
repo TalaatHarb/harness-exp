@@ -11,6 +11,7 @@ import com.google.inject.Inject;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
+import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
@@ -22,6 +23,7 @@ import net.talaatharb.harness.config.HarnessSettings;
 import net.talaatharb.harness.llm.ModelProvider;
 import net.talaatharb.harness.llm.ModelProviderRegistry;
 import net.talaatharb.harness.llm.ModelSettings;
+import net.talaatharb.harness.llm.OllamaModelProvider;
 
 public class ModelSectionController implements SettingsSection {
     private static final Logger LOG = LoggerFactory.getLogger(ModelSectionController.class);
@@ -34,6 +36,10 @@ public class ModelSectionController implements SettingsSection {
     @FXML private ComboBox<String> modelCombo;
     @FXML private Spinner<Integer> timeoutSpinner;
     @FXML private CheckBox streamingCheck;
+    @FXML private Spinner<Integer> maxTokensSpinner;
+    @FXML private Button localButton;
+    @FXML private Button cloudButton;
+    @FXML private Button defaultUrlButton;
     @FXML private Label testLabel;
 
     @Inject
@@ -45,6 +51,36 @@ public class ModelSectionController implements SettingsSection {
     private void initialize() {
         providerCombo.setItems(FXCollections.observableArrayList(
                 providers.all().stream().map(ModelProvider::id).toList()));
+        providerCombo.valueProperty().addListener((obs, old, now) -> onProviderChanged(old, now));
+    }
+
+    /** Swaps in the new provider's default URL unless the user typed a custom one, and updates hints. */
+    private void onProviderChanged(String oldId, String newId) {
+        ModelProvider provider = providers.find(newId).orElse(null);
+        boolean ollama = OllamaModelProvider.ID.equals(newId);
+        for (Button b : List.of(localButton, cloudButton)) {
+            b.setVisible(ollama);
+            b.setManaged(ollama);
+        }
+        defaultUrlButton.setVisible(!ollama);
+        defaultUrlButton.setManaged(!ollama);
+        if (provider == null) {
+            return;
+        }
+        String env = provider.apiKeyEnvVar();
+        apiKeyField.setPromptText((ollama ? "optional locally, required for Ollama cloud" : "required")
+                + (env == null ? "" : "; blank = $" + env));
+        if (oldId != null && !oldId.equals(newId) && isDefaultUrl(baseUrlField.getText())) {
+            baseUrlField.setText(provider.defaultBaseUrl());
+            modelCombo.getItems().clear();
+            testLabel.setText("Provider changed: pick a model (Test connection lists them).");
+        }
+    }
+
+    private boolean isDefaultUrl(String url) {
+        String u = url == null ? "" : url.trim();
+        return u.isEmpty() || u.equals(ModelSettings.CLOUD_OLLAMA_URL)
+                || providers.all().stream().anyMatch(p -> u.equals(p.defaultBaseUrl()));
     }
 
     public VBox root() {
@@ -59,6 +95,8 @@ public class ModelSectionController implements SettingsSection {
         modelCombo.setValue(s.model.model);
         SettingsSection.intSpinner(timeoutSpinner, 5, 3600, (int) s.model.requestTimeoutSeconds);
         streamingCheck.setSelected(s.model.streaming);
+        SettingsSection.intSpinner(maxTokensSpinner, 1, 1_000_000, s.model.maxOutputTokens);
+        onProviderChanged(null, s.model.provider);
     }
 
     @Override
@@ -70,6 +108,12 @@ public class ModelSectionController implements SettingsSection {
         s.model.model = model == null || model.isBlank() ? s.model.model : model.trim();
         s.model.requestTimeoutSeconds = SettingsSection.spinnerValue(timeoutSpinner);
         s.model.streaming = streamingCheck.isSelected();
+        s.model.maxOutputTokens = SettingsSection.spinnerValue(maxTokensSpinner);
+    }
+
+    @FXML
+    private void onDefaultUrl() {
+        providers.find(providerCombo.getValue()).ifPresent(p -> baseUrlField.setText(p.defaultBaseUrl()));
     }
 
     @FXML
