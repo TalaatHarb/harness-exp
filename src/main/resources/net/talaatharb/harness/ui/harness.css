@@ -1,0 +1,138 @@
+.root {
+    -fx-font-size: 13px;
+}
+
+.top-bar {
+    -fx-background-color: #f6f7f9;
+    -fx-border-color: transparent transparent #dde1e6 transparent;
+}
+
+.app-title {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+}
+
+.status {
+    -fx-text-fill: #6b7280;
+}
+
+.status-ok {
+    -fx-text-fill: #15803d;
+}
+
+.status-error {
+    -fx-text-fill: #b91c1c;
+}
+
+.chat-scroll, .chat-scroll > .viewport {
+    -fx-background-color: white;
+}
+
+.chat {
+    -fx-background-color: white;
+}
+
+.empty-hint {
+    -fx-text-fill: #9ca3af;
+    -fx-font-size: 15px;
+    -fx-padding: 120 0 0 0;
+}
+
+.composer {
+    -fx-background-color: #f6f7f9;
+    -fx-border-color: #dde1e6 transparent transparent transparent;
+}
+
+.bubble {
+    -fx-padding: 8 12 8 12;
+    -fx-background-radius: 12;
+}
+
+.bubble-user {
+    -fx-background-color: #2563eb;
+    -fx-text-fill: white;
+}
+
+.bubble-assistant {
+    -fx-background-color: #f1f3f5;
+    -fx-text-fill: #111827;
+}
+
+.streaming {
+    -fx-text-fill: #4b5563;
+}
+
+.trace {
+    -fx-font-family: "Consolas", "Menlo", monospace;
+    -fx-font-size: 11px;
+    -fx-text-fill: #6b7280;
+}
+
+.trace-error {
+    -fx-text-fill: #b45309;
+}
+
+.notice {
+    -fx-font-style: italic;
+    -fx-text-fill: #92400e;
+}
+
+.notice-error, .notice-blocked, .notice-limit_reached {
+    -fx-text-fill: #b91c1c;
+}
+
+.thinking {
+    -fx-text-fill: #6b7280;
+    -fx-font-size: 12px;
+}
+
+.generated-ui {
+    -fx-padding: 4 0 4 0;
+}
+
+.ui-card {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #d1d5db;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+}
+
+.ui-heading {
+    -fx-font-weight: bold;
+    -fx-font-size: 14px;
+}
+
+.ui-badge {
+    -fx-background-color: #e0e7ff;
+    -fx-text-fill: #3730a3;
+    -fx-padding: 2 8 2 8;
+    -fx-background-radius: 10;
+    -fx-font-size: 11px;
+}
+
+.section-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.section-help {
+    -fx-text-fill: #6b7280;
+}
+
+.mono {
+    -fx-font-family: "Consolas", "Menlo", monospace;
+}
+
+.copy-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #9ca3af;
+    -fx-font-size: 11px;
+    -fx-padding: 1 6 1 6;
+    -fx-cursor: hand;
+}
+
+.copy-button:hover {
+    -fx-background-color: #eef0f3;
+    -fx-text-fill: #374151;
+    -fx-background-radius: 6;
+}

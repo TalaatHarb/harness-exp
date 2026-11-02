@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.control.Tooltip?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Priority?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+            fx:controller="net.talaatharb.harness.ui.MainController" styleClass="main">
+    <top>
+        <HBox spacing="8" alignment="CENTER_LEFT" styleClass="top-bar">
+            <padding><Insets top="8" right="12" bottom="8" left="12"/></padding>
+            <Label text="Harness" styleClass="app-title"/>
+            <ComboBox fx:id="modelCombo" editable="true" prefWidth="240" promptText="model">
+                <tooltip><Tooltip text="Model used for the next message"/></tooltip>
+            </ComboBox>
+            <Button text="⟳" onAction="#onRefreshModels">
+                <tooltip><Tooltip text="Refresh model list"/></tooltip>
+            </Button>
+            <Label fx:id="statusLabel" styleClass="status"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Button text="New chat" onAction="#onNewChat"/>
+            <Button text="⚙ Harness" onAction="#onOpenSettings">
+                <tooltip><Tooltip text="System prompt, skills, context, tools, loop limits, guardrails, approval, reply"/></tooltip>
+            </Button>
+        </HBox>
+    </top>
+    <center>
+        <ScrollPane fx:id="scrollPane" fitToWidth="true" hbarPolicy="NEVER" styleClass="chat-scroll">
+            <VBox fx:id="messagesBox" spacing="10" styleClass="chat">
+                <padding><Insets top="16" right="20" bottom="16" left="20"/></padding>
+                <Label fx:id="emptyLabel" text="Ask anything. Configure the harness with ⚙ Harness." styleClass="empty-hint"/>
+            </VBox>
+        </ScrollPane>
+    </center>
+    <bottom>
+        <HBox spacing="8" alignment="BOTTOM_CENTER" styleClass="composer">
+            <padding><Insets top="8" right="12" bottom="12" left="12"/></padding>
+            <TextArea fx:id="inputArea" HBox.hgrow="ALWAYS" prefRowCount="3" wrapText="true"
+                      promptText="Message the agent (Enter to send, Shift+Enter for a new line)"/>
+            <VBox spacing="6">
+                <Button fx:id="sendButton" text="Send" defaultButton="false" onAction="#onSend" maxWidth="Infinity"/>
+                <Button fx:id="stopButton" text="Stop" onAction="#onStop" disable="true" maxWidth="Infinity"/>
+            </VBox>
+        </HBox>
+    </bottom>
+</BorderPane>

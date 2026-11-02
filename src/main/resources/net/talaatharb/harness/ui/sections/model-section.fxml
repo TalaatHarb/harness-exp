@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.Spinner?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox fx:id="root" xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+      fx:controller="net.talaatharb.harness.ui.sections.ModelSectionController" spacing="10" styleClass="section">
+    <padding><Insets top="16" right="16" bottom="16" left="16"/></padding>
+    <Label text="Model provider" styleClass="section-title"/>
+    <Label wrapText="true" styleClass="section-help"
+           text="Local Ollama needs no key. For Ollama cloud use https://ollama.com and an API key. Other providers can be added by binding a ModelProvider in AppModule."/>
+    <GridPane hgap="10" vgap="8">
+        <Label text="Provider" GridPane.rowIndex="0"/>
+        <ComboBox fx:id="providerCombo" prefWidth="260" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+        <Label text="Base URL" GridPane.rowIndex="1"/>
+        <HBox spacing="6" GridPane.rowIndex="1" GridPane.columnIndex="1">
+            <TextField fx:id="baseUrlField" prefWidth="320"/>
+            <Button text="Local" onAction="#onLocal"/>
+            <Button text="Cloud" onAction="#onCloud"/>
+        </HBox>
+        <Label text="API key" GridPane.rowIndex="2"/>
+        <PasswordField fx:id="apiKeyField" promptText="optional (required for cloud)" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+        <Label text="Model" GridPane.rowIndex="3"/>
+        <ComboBox fx:id="modelCombo" editable="true" prefWidth="320" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+        <Label text="Timeout (s)" GridPane.rowIndex="4"/>
+        <Spinner fx:id="timeoutSpinner" prefWidth="120" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
+        <Label text="Streaming" GridPane.rowIndex="5"/>
+        <CheckBox fx:id="streamingCheck" text="Stream tokens into the chat" GridPane.rowIndex="5" GridPane.columnIndex="1"/>
+    </GridPane>
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Button text="Test connection &amp; list models" onAction="#onTest"/>
+        <Label fx:id="testLabel" wrapText="true"/>
+    </HBox>
+</VBox>

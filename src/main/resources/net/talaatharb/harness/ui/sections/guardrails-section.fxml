@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Spinner?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+      fx:controller="net.talaatharb.harness.ui.sections.GuardrailsSectionController" spacing="10" styleClass="section">
+    <padding><Insets top="16" right="16" bottom="16" left="16"/></padding>
+    <Label text="Guardrails" styleClass="section-title"/>
+    <Label wrapText="true" styleClass="section-help"
+           text="Checks run on user INPUT, on each TOOL_CALL and on the final OUTPUT. A guardrail can allow, modify (e.g. redact) or block. Add more by binding a Guardrail."/>
+    <CheckBox fx:id="enabledCheck" text="Enable guardrails"/>
+    <VBox fx:id="guardrailsBox" spacing="4"/>
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Label text="Max input characters"/>
+        <Spinner fx:id="maxInputSpinner" prefWidth="120"/>
+    </HBox>
+    <Label text="Blocked terms (one per line)"/>
+    <TextArea fx:id="blockedTermsArea" VBox.vgrow="ALWAYS"/>
+</VBox>

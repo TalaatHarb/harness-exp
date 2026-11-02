@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.Spinner?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+      fx:controller="net.talaatharb.harness.ui.sections.ApprovalSectionController" spacing="10" styleClass="section">
+    <padding><Insets top="16" right="16" bottom="16" left="16"/></padding>
+    <Label text="Human approval" styleClass="section-title"/>
+    <Label wrapText="true" styleClass="section-help"
+           text="Decide when the agent must pause and ask you before running a tool. Unanswered requests are denied after the timeout and the model is told the call was refused."/>
+    <GridPane hgap="10" vgap="8">
+        <Label text="Policy" GridPane.rowIndex="0"/>
+        <ComboBox fx:id="policyCombo" prefWidth="300" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+        <Label text="Timeout (s)" GridPane.rowIndex="1"/>
+        <Spinner fx:id="timeoutSpinner" prefWidth="110" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+    </GridPane>
+    <Label text="Always-allowed tools (skip approval)"/>
+    <ListView fx:id="allowedList" VBox.vgrow="ALWAYS"/>
+    <Button text="Revoke selected" onAction="#onRevoke"/>
+</VBox>

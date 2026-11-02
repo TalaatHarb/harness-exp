@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Tab?>
+<?import javafx.scene.control.TabPane?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+
+<BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+            fx:controller="net.talaatharb.harness.ui.SettingsController">
+    <center>
+        <TabPane tabClosingPolicy="UNAVAILABLE" side="LEFT" styleClass="settings-tabs">
+            <Tab text="Model"><fx:include fx:id="modelSection" source="sections/model-section.fxml"/></Tab>
+            <Tab text="System prompt"><fx:include fx:id="systemPromptSection" source="sections/system-prompt-section.fxml"/></Tab>
+            <Tab text="Skills"><fx:include fx:id="skillsSection" source="sections/skills-section.fxml"/></Tab>
+            <Tab text="Context builder"><fx:include fx:id="contextSection" source="sections/context-section.fxml"/></Tab>
+            <Tab text="Tools &amp; MCP"><fx:include fx:id="toolsSection" source="sections/tools-section.fxml"/></Tab>
+            <Tab text="Agent loop"><fx:include fx:id="agentLoopSection" source="sections/agent-loop-section.fxml"/></Tab>
+            <Tab text="Guardrails"><fx:include fx:id="guardrailsSection" source="sections/guardrails-section.fxml"/></Tab>
+            <Tab text="Human approval"><fx:include fx:id="approvalSection" source="sections/approval-section.fxml"/></Tab>
+            <Tab text="Reply &amp; UI"><fx:include fx:id="replySection" source="sections/reply-section.fxml"/></Tab>
+        </TabPane>
+    </center>
+    <bottom>
+        <HBox spacing="8" alignment="CENTER_RIGHT">
+            <padding><Insets top="8" right="12" bottom="12" left="12"/></padding>
+            <Button text="Reset all to defaults" onAction="#onResetDefaults"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Button text="Cancel" cancelButton="true" onAction="#onCancel"/>
+            <Button text="Apply" onAction="#onApply"/>
+            <Button text="Save &amp; close" defaultButton="true" onAction="#onSave"/>
+        </HBox>
+    </bottom>
+</BorderPane>

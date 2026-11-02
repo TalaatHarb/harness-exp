@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+      fx:controller="net.talaatharb.harness.ui.sections.SystemPromptSectionController" spacing="10" styleClass="section">
+    <padding><Insets top="16" right="16" bottom="16" left="16"/></padding>
+    <Label text="System prompt" styleClass="section-title"/>
+    <Label wrapText="true" styleClass="section-help"
+           text="Template for the first context section. Placeholders: {{date}} {{time}} {{model}} {{os}} {{user}}."/>
+    <TextArea fx:id="templateArea" wrapText="true" VBox.vgrow="ALWAYS" styleClass="mono"/>
+    <HBox spacing="8">
+        <Button text="Reset to default" onAction="#onReset"/>
+        <Button text="Preview rendered" onAction="#onPreview"/>
+    </HBox>
+    <TextArea fx:id="previewArea" editable="false" wrapText="true" prefRowCount="6" styleClass="mono"/>
+</VBox>

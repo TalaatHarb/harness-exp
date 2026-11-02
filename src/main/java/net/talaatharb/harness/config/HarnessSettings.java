@@ -1,0 +1,33 @@
+package net.talaatharb.harness.config;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
+import net.talaatharb.harness.agent.AgentLoopSettings;
+import net.talaatharb.harness.approval.ApprovalSettings;
+import net.talaatharb.harness.context.ContextSettings;
+import net.talaatharb.harness.guardrails.GuardrailSettings;
+import net.talaatharb.harness.llm.ModelSettings;
+import net.talaatharb.harness.prompt.SystemPromptSettings;
+import net.talaatharb.harness.reply.ReplySettings;
+import net.talaatharb.harness.skills.SkillDefinition;
+import net.talaatharb.harness.tools.ToolSettings;
+
+/**
+ * Root of all user-tunable harness configuration. Each section of the
+ * "Harness" settings window edits one of these fields.
+ */
+@JsonIgnoreProperties(ignoreUnknown = true)
+public class HarnessSettings {
+    public ModelSettings model = new ModelSettings();
+    public SystemPromptSettings systemPrompt = new SystemPromptSettings();
+    public List<SkillDefinition> skills = new ArrayList<>(SkillDefinition.defaults());
+    public ContextSettings context = new ContextSettings();
+    public ToolSettings tools = new ToolSettings();
+    public AgentLoopSettings agentLoop = new AgentLoopSettings();
+    public GuardrailSettings guardrails = new GuardrailSettings();
+    public ApprovalSettings approval = new ApprovalSettings();
+    public ReplySettings reply = new ReplySettings();
+}

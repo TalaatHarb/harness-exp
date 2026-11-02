@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+      fx:controller="net.talaatharb.harness.ui.sections.ReplySectionController" spacing="10" styleClass="section">
+    <padding><Insets top="16" right="16" bottom="16" left="16"/></padding>
+    <Label text="Reply &amp; agentic UI" styleClass="section-title"/>
+    <Label wrapText="true" styleClass="section-help"
+           text="In Agentic UI mode the model is told it may embed ```ui JSON blocks; they are rendered as live components and buttons send their action back to the agent."/>
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Label text="Mode"/>
+        <ComboBox fx:id="modeCombo" prefWidth="180"/>
+        <CheckBox fx:id="traceCheck" text="Show tool trace"/>
+        <CheckBox fx:id="thinkingCheck" text="Show model thinking"/>
+    </HBox>
+    <Label text="Try a UI spec"/>
+    <TextArea fx:id="specArea" prefRowCount="7" wrapText="true" styleClass="mono"/>
+    <Button text="Render preview" onAction="#onPreview"/>
+    <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS">
+        <VBox fx:id="previewBox" spacing="6">
+            <padding><Insets top="8" right="8" bottom="8" left="8"/></padding>
+        </VBox>
+    </ScrollPane>
+</VBox>

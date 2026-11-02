@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Spinner?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+      fx:controller="net.talaatharb.harness.ui.sections.AgentLoopSectionController" spacing="10" styleClass="section">
+    <padding><Insets top="16" right="16" bottom="16" left="16"/></padding>
+    <Label text="Agent loop" styleClass="section-title"/>
+    <Label wrapText="true" styleClass="section-help"
+           text="Per-turn limits that stop runaway loops. Values are clamped to hard ceilings defined in AgentLoopLimits."/>
+    <GridPane hgap="10" vgap="8">
+        <Label text="Max iterations (model calls)" GridPane.rowIndex="0"/>
+        <Spinner fx:id="iterationsSpinner" prefWidth="110" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+        <Label fx:id="iterationsMax" styleClass="section-help" GridPane.rowIndex="0" GridPane.columnIndex="2"/>
+        <Label text="Max tool calls" GridPane.rowIndex="1"/>
+        <Spinner fx:id="toolCallsSpinner" prefWidth="110" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+        <Label fx:id="toolCallsMax" styleClass="section-help" GridPane.rowIndex="1" GridPane.columnIndex="2"/>
+        <Label text="Time budget (seconds)" GridPane.rowIndex="2"/>
+        <Spinner fx:id="durationSpinner" prefWidth="110" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+        <Label fx:id="durationMax" styleClass="section-help" GridPane.rowIndex="2" GridPane.columnIndex="2"/>
+        <Label text="Max identical tool calls" GridPane.rowIndex="3"/>
+        <Spinner fx:id="identicalSpinner" prefWidth="110" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+        <Label fx:id="identicalMax" styleClass="section-help" GridPane.rowIndex="3" GridPane.columnIndex="2"/>
+        <Label text="Max consecutive errors" GridPane.rowIndex="4"/>
+        <Spinner fx:id="errorsSpinner" prefWidth="110" GridPane.rowIndex="4" GridPane.columnIndex="1"/>
+        <Label fx:id="errorsMax" styleClass="section-help" GridPane.rowIndex="4" GridPane.columnIndex="2"/>
+    </GridPane>
+    <Label text="Hook points" styleClass="section-title"/>
+    <TextArea fx:id="hooksArea" editable="false" wrapText="true" VBox.vgrow="ALWAYS" styleClass="mono"/>
+</VBox>

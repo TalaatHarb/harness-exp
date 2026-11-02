@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+      fx:controller="net.talaatharb.harness.ui.sections.SkillsSectionController" spacing="10" styleClass="section">
+    <padding><Insets top="16" right="16" bottom="16" left="16"/></padding>
+    <Label text="Skills" styleClass="section-title"/>
+    <Label wrapText="true" styleClass="section-help"
+           text="Reusable instruction packs. A skill without triggers is always injected; otherwise only when the user's message contains a trigger phrase."/>
+    <HBox spacing="12" VBox.vgrow="ALWAYS">
+        <VBox spacing="6" prefWidth="220">
+            <ListView fx:id="skillList" VBox.vgrow="ALWAYS"/>
+            <HBox spacing="6">
+                <Button text="Add" onAction="#onAdd"/>
+                <Button text="Remove" onAction="#onRemove"/>
+            </HBox>
+        </VBox>
+        <VBox fx:id="form" spacing="6" HBox.hgrow="ALWAYS">
+            <CheckBox fx:id="enabledCheck" text="Enabled"/>
+            <Label text="Name"/>
+            <TextField fx:id="nameField"/>
+            <Label text="Description"/>
+            <TextField fx:id="descriptionField"/>
+            <Label text="Triggers (comma separated, empty = always)"/>
+            <TextField fx:id="triggersField"/>
+            <Label text="Instructions"/>
+            <TextArea fx:id="instructionsArea" wrapText="true" VBox.vgrow="ALWAYS"/>
+        </VBox>
+    </HBox>
+</VBox>

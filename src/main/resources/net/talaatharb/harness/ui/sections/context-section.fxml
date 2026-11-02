@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Spinner?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+      fx:controller="net.talaatharb.harness.ui.sections.ContextSectionController" spacing="10" styleClass="section">
+    <padding><Insets top="16" right="16" bottom="16" left="16"/></padding>
+    <Label text="Context builder" styleClass="section-title"/>
+    <Label wrapText="true" styleClass="section-help"
+           text="The context sent to the model is assembled by a pipeline of contributors (in order). Switch stages on/off, tune the history window, pin notes, and preview the result. Add stages by binding a ContextContributor."/>
+    <VBox fx:id="contributorsBox" spacing="4"/>
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Label text="History window (messages)"/>
+        <Spinner fx:id="historySpinner" prefWidth="100"/>
+    </HBox>
+    <Label text="Pinned context"/>
+    <TextArea fx:id="pinnedArea" wrapText="true" prefRowCount="4"/>
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <TextField fx:id="sampleField" text="Hello, can you summarize this?" HBox.hgrow="ALWAYS"/>
+        <Button text="Preview context" onAction="#onPreview"/>
+    </HBox>
+    <TextArea fx:id="previewArea" editable="false" wrapText="true" VBox.vgrow="ALWAYS" styleClass="mono"/>
+</VBox>
