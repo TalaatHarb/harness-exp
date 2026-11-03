@@ -30,7 +30,7 @@ public final class AttachmentLoader {
     }
 
     public static final String[] TEXT_EXTENSIONS = { "md", "markdown", "txt", "text", "log", "csv", "json", "yaml",
-            "yml", "xml" };
+            "yml", "xml", "html", "htm", "java", "cs", "py" };
     public static final String[] PDF_EXTENSIONS = { "pdf" };
     public static final String[] IMAGE_EXTENSIONS = { "png", "jpg", "jpeg", "gif", "bmp", "webp" };
     public static final String[] AUDIO_EXTENSIONS = { "mp3", "wav", "m4a", "aac", "aif", "aiff", "ogg", "flac" };
@@ -40,7 +40,9 @@ public final class AttachmentLoader {
             Map.entry("txt", "text/plain"), Map.entry("text", "text/plain"), Map.entry("log", "text/plain"),
             Map.entry("csv", "text/csv"), Map.entry("json", "application/json"),
             Map.entry("yaml", "application/yaml"), Map.entry("yml", "application/yaml"),
-            Map.entry("xml", "application/xml"), Map.entry("pdf", "application/pdf"),
+            Map.entry("xml", "application/xml"), Map.entry("html", "text/html"), Map.entry("htm", "text/html"),
+            Map.entry("java", "text/x-java"), Map.entry("cs", "text/x-csharp"), Map.entry("py", "text/x-python"),
+            Map.entry("pdf", "application/pdf"),
             Map.entry("png", "image/png"), Map.entry("jpg", "image/jpeg"), Map.entry("jpeg", "image/jpeg"),
             Map.entry("gif", "image/gif"), Map.entry("bmp", "image/bmp"), Map.entry("webp", "image/webp"),
             Map.entry("mp3", "audio/mpeg"), Map.entry("wav", "audio/wav"), Map.entry("m4a", "audio/mp4"),

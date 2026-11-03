@@ -48,6 +48,7 @@ import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.Window;
+import net.talaatharb.harness.attachments.AttachmentLoader;
 import net.talaatharb.harness.history.ConversationSummary;
 import net.talaatharb.harness.rag.RagDocument;
 import net.talaatharb.harness.rag.RagService;
@@ -231,9 +232,10 @@ public class KnowledgeDialog {
         FileChooser chooser = new FileChooser();
         chooser.setTitle("Add documents");
         chooser.getExtensionFilters().addAll(
-                new FileChooser.ExtensionFilter("Text, markdown, code and PDF", "*.md", "*.markdown", "*.txt", "*.pdf",
-                        "*.csv", "*.json", "*.xml", "*.html", "*.htm", "*.java", "*.py", "*.js", "*.ts", "*.yaml",
-                        "*.yml", "*.log", "*.sql"),
+                new FileChooser.ExtensionFilter("Text, markdown, code and PDF", java.util.stream.Stream
+                        .concat(java.util.Arrays.stream(AttachmentLoader.TEXT_EXTENSIONS),
+                                java.util.Arrays.stream(AttachmentLoader.PDF_EXTENSIONS))
+                        .map(e -> "*." + e).toList()),
                 new FileChooser.ExtensionFilter("All files", "*.*"));
         List<File> files = chooser.showOpenMultipleDialog(stage);
         if (files != null && !files.isEmpty()) {
@@ -243,7 +245,7 @@ public class KnowledgeDialog {
 
     private void onAddFolder() {
         DirectoryChooser chooser = new DirectoryChooser();
-        chooser.setTitle("Add a folder (text, markdown and PDF files, recursively)");
+        chooser.setTitle("Add a folder (text, markdown, code and PDF files, recursively)");
         File folder = chooser.showDialog(stage);
         if (folder != null) {
             ingest(expand(List.of(folder.toPath())));
@@ -265,7 +267,7 @@ public class KnowledgeDialog {
             }
         }
         if (files.isEmpty() && !paths.isEmpty()) {
-            statusLabel.setText("No text, markdown or PDF files found.");
+            statusLabel.setText("No text, markdown, code or PDF files found.");
         }
         return files;
     }

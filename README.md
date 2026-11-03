@@ -64,6 +64,18 @@ separate **⚙ Harness** settings window, one tab per harness concern.
 </details>
 
 <details>
+<summary>Memory</summary>
+
+![Memory tab: backend and folder, context and recall limits, duplicate threshold, and the memory editor](img/MemoryTab.PNG)
+</details>
+
+<details>
+<summary>RAG</summary>
+
+![RAG tab: automatic context, embedder and model, Ollama URL with Test, chunking and retrieval limits](img/RAGConfigurationTab.PNG)
+</details>
+
+<details>
 <summary>Context builder</summary>
 
 ![Context builder section: contributor pipeline, history window and attachment limits](img/ContextBuilder.PNG)
@@ -268,13 +280,17 @@ The **memory** context stage (between skills and the tool catalog; it can be dis
 The **Memory** tab lists the memories (newest first) with search. You can add, edit, delete (with confirmation) and
 revert memories by hand, and **Copy all to …** copies every memory to the other backend, keeping the same ids.
 
+![Memory tab: backend and folder, limits, search, and the editor for adding, editing and deleting memories](img/MemoryTab.PNG)
+
 ## RAG (documents)
 
 Retrieval-augmented generation for material that is too large for memories or the chat (package `rag`). Unlike
 memories, documents belong to **one conversation**.
 
-- **Adding documents**: click **📚** in the chat window. You can add files (markdown, text, code, CSV/JSON/XML/HTML,
-  PDF), a folder (recursive, up to 500 files), or pasted text, or drop files onto the window. Indexing runs in the
+![Answering questions about a project from 14 indexed documents (📚 14 in the top bar)](img/RAGInAction.PNG)
+
+- **Adding documents**: click **📚** in the chat window. You can add files (markdown, text, log, CSV, JSON, YAML, XML,
+  HTML, Java, C#, Python and PDF), a folder (recursive, up to 500 files), or pasted text, or drop files onto the window. Indexing runs in the
   background with progress and **Cancel**. The agent can also add documents with `rag_add`.
 - **Indexing**: text is split into overlapping chunks (default 1200 characters with a 200-character overlap), cut at
   paragraph or sentence boundaries where possible. Each chunk is embedded, and the chunks and their vectors are stored

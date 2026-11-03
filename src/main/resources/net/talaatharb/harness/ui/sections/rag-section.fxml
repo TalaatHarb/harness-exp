@@ -17,7 +17,7 @@
     <padding><Insets top="16" right="16" bottom="16" left="16"/></padding>
     <Label text="RAG (documents)" styleClass="section-title"/>
     <Label wrapText="true" styleClass="section-help"
-           text="Retrieval-augmented generation for material too large for memories or the chat: each conversation has its own knowledge base. Add files, folders or text with the 📚 button in the chat window; they are split into overlapping chunks, embedded and stored with their vectors (RAG database in the Storage tab). The 'rag' context stage adds the passages closest to each message, and the agent can search (rag_search) or add text and files (rag_add, needs approval). Documents can be copied to other conversations from the 📚 window."/>
+           text="Retrieval-augmented generation for material too large for memories or the chat: each conversation has its own knowledge base. Add files, folders or text with the 📚 button in the chat window; they are split into overlapping chunks, embedded and stored with their vectors (RAG index folder in the Storage tab). The 'rag' context stage adds the passages closest to each message, and the agent can search (rag_search) or add text and files (rag_add, needs approval). Documents can be copied to other conversations from the 📚 window."/>
 
     <CheckBox fx:id="autoContextCheck" text="Add relevant passages to the context automatically"/>
 

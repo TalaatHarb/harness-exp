@@ -213,8 +213,11 @@ class RagTest {
         Files.createDirectories(dir.resolve("sub"));
         Files.writeString(dir.resolve("sub").resolve("b.txt"), ROCKET);
         Files.write(dir.resolve("image.png"), new byte[] {1, 2, 3});
+        for (String ext : List.of("xml", "html", "java", "cs", "py")) {
+            Files.writeString(dir.resolve("sub").resolve("code." + ext), "content " + ext);
+        }
         List<Path> files = RagService.indexableFiles(dir);
-        assertEquals(2, files.size(), files.toString());
+        assertEquals(7, files.size(), files.toString());
 
         RagService rag = service();
         RagDocument doc = rag.ingestFile("c1", dir.resolve("a.md"), "Cat facts", null);
