@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory;
 
 /** The data locations in effect, resolved from {@link StorageSettings} once at startup. */
 public record StoragePaths(Path skillsDir, Path dynamicToolsDir, Path historyDb, Path modelsDir, Path memoryDir,
-        Path memoryDb) {
+        Path memoryDb, Path ragIndex) {
     private static final Logger LOG = LoggerFactory.getLogger(StoragePaths.class);
 
     public static final String SKILLS = "skills";
@@ -19,6 +19,7 @@ public record StoragePaths(Path skillsDir, Path dynamicToolsDir, Path historyDb,
     public static final String MODELS = "models";
     public static final String MEMORY = "memory";
     public static final String MEMORY_DB = "memory.db";
+    public static final String RAG_INDEX = "rag-index";
 
     public static StoragePaths resolve(Path settingsPath, StorageSettings storage) {
         Path base = settingsDir(settingsPath);
@@ -29,7 +30,8 @@ public record StoragePaths(Path skillsDir, Path dynamicToolsDir, Path historyDb,
                 resolve(base, s.historyDb, HISTORY_DB),
                 resolve(base, s.modelsDir, MODELS),
                 resolve(base, s.memoryDir, MEMORY),
-                resolve(base, s.memoryDb, MEMORY_DB));
+                resolve(base, s.memoryDb, MEMORY_DB),
+                resolve(base, s.ragIndex, RAG_INDEX));
     }
 
     public static StoragePaths defaults(Path settingsPath) {

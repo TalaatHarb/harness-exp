@@ -82,6 +82,34 @@ public final class AttachmentLoader {
         return attachment;
     }
 
+    /** {@code true} for markdown/text and PDF files, whose text can be extracted. */
+    public static boolean hasText(Path file) {
+        return type(file).map(t -> t.kind() == Kind.TEXT || t.kind() == Kind.PDF).orElse(false);
+    }
+
+    /**
+     * The full text of a markdown/text or PDF file (no truncation), e.g. for indexing.
+     *
+     * @throws IllegalArgumentException for other file types, empty files or files over {@code maxBytes}
+     * @throws IOException              if the file can't be read or parsed
+     */
+    public static String extractText(Path file, long maxBytes) throws IOException {
+        String name = file.getFileName() == null ? "file" : file.getFileName().toString();
+        if (!hasText(file)) {
+            throw new IllegalArgumentException("Unsupported file type: " + name + " (use markdown/text or PDF)");
+        }
+        long size = Files.size(file);
+        if (size > maxBytes) {
+            throw new IllegalArgumentException(name + " is " + Attachment.formatSize(size) + "; the limit is "
+                    + Attachment.formatSize(maxBytes));
+        }
+        if (size == 0) {
+            throw new IllegalArgumentException(name + " is empty");
+        }
+        byte[] bytes = Files.readAllBytes(file);
+        return type(file).get().kind() == Kind.PDF ? pdfText(name, bytes) : decode(bytes);
+    }
+
     private static Optional<Type> type(Path file) {
         String name = file.getFileName() == null ? "" : file.getFileName().toString();
         int dot = name.lastIndexOf('.');

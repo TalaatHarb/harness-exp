@@ -137,6 +137,19 @@ class AgentLoopTest {
                 approvals, hooks);
     }
 
+    @Test
+    void runExposesTheConversationIdToToolsAndContext() {
+        List<String> seen = new ArrayList<>();
+        ScriptedProvider provider = new ScriptedProvider(r -> {
+            seen.add(ConversationScope.current());
+            return "ok";
+        });
+        AgentLoop loop = loop(provider);
+        run(loop, "hi", new Conversation("conv-42"));
+        assertEquals(List.of("conv-42"), seen);
+        assertEquals(null, ConversationScope.current());
+    }
+
     private void update(Consumer<HarnessSettings> change) {
         HarnessSettings s = store.copy();
         change.accept(s);

@@ -34,6 +34,9 @@
             </Button>
             <Label fx:id="statusLabel" styleClass="status"/>
             <Region HBox.hgrow="ALWAYS"/>
+            <Button fx:id="knowledgeButton" text="📚" onAction="#onKnowledge">
+                <tooltip><Tooltip text="Documents (RAG) for this conversation: add large files, folders or text to search"/></tooltip>
+            </Button>
             <Button text="New chat" onAction="#onNewChat"/>
             <Button text="⚙ Harness" onAction="#onOpenSettings">
                 <tooltip><Tooltip text="System prompt, skills, context, tools, loop limits, guardrails, approval, reply, speech"/></tooltip>

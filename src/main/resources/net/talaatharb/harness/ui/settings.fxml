@@ -17,6 +17,7 @@
             <Tab text="System prompt"><fx:include fx:id="systemPromptSection" source="sections/system-prompt-section.fxml"/></Tab>
             <Tab text="Skills"><fx:include fx:id="skillsSection" source="sections/skills-section.fxml"/></Tab>
             <Tab text="Memory"><fx:include fx:id="memorySection" source="sections/memory-section.fxml"/></Tab>
+            <Tab text="RAG"><fx:include fx:id="ragSection" source="sections/rag-section.fxml"/></Tab>
             <Tab text="Context builder"><fx:include fx:id="contextSection" source="sections/context-section.fxml"/></Tab>
             <Tab text="Tools &amp; MCP"><fx:include fx:id="toolsSection" source="sections/tools-section.fxml"/></Tab>
             <Tab text="Agent loop"><fx:include fx:id="agentLoopSection" source="sections/agent-loop-section.fxml"/></Tab>

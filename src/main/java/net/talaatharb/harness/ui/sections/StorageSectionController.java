@@ -18,7 +18,7 @@ import net.talaatharb.harness.config.SettingsStore;
 import net.talaatharb.harness.config.StoragePaths;
 import net.talaatharb.harness.config.StorageSettings;
 
-/** Picks external locations for skills, dynamic tools, history, memories and models. They take effect after a restart. */
+/** Picks external locations for skills, dynamic tools, history, memories, RAG documents and models. They take effect after a restart. */
 public class StorageSectionController implements SettingsSection {
     private final Path settingsPath;
     private final StoragePaths inUse;
@@ -37,6 +37,8 @@ public class StorageSectionController implements SettingsSection {
     @FXML private TextField memoryDbField;
     @FXML private Label memoryDirInUse;
     @FXML private Label memoryDbInUse;
+    @FXML private TextField ragIndexField;
+    @FXML private Label ragIndexInUse;
     @FXML private Label restartLabel;
 
     @Inject
@@ -66,6 +68,9 @@ public class StorageSectionController implements SettingsSection {
         memoryDbInUse.setText("In use: " + inUse.memoryDb());
         memoryDirField.textProperty().addListener((o, a, b) -> updateRestartNotice());
         memoryDbField.textProperty().addListener((o, a, b) -> updateRestartNotice());
+        ragIndexField.setPromptText(defaults.ragIndex() + "  (default)");
+        ragIndexInUse.setText("In use: " + inUse.ragIndex());
+        ragIndexField.textProperty().addListener((o, a, b) -> updateRestartNotice());
     }
 
     @Override
@@ -77,6 +82,7 @@ public class StorageSectionController implements SettingsSection {
         modelsField.setText(s.modelsDir);
         memoryDirField.setText(s.memoryDir);
         memoryDbField.setText(s.memoryDb);
+        ragIndexField.setText(s.ragIndex);
         updateRestartNotice();
     }
 
@@ -91,6 +97,7 @@ public class StorageSectionController implements SettingsSection {
         settings.storage.modelsDir = modelsField.getText().strip();
         settings.storage.memoryDir = memoryDirField.getText().strip();
         settings.storage.memoryDb = memoryDbField.getText().strip();
+        settings.storage.ragIndex = ragIndexField.getText().strip();
     }
 
     private StoragePaths pending() {
@@ -101,6 +108,7 @@ public class StorageSectionController implements SettingsSection {
         s.modelsDir = modelsField.getText();
         s.memoryDir = memoryDirField.getText();
         s.memoryDb = memoryDbField.getText();
+        s.ragIndex = ragIndexField.getText();
         return StoragePaths.resolve(settingsPath, s);
     }
 
@@ -136,6 +144,11 @@ public class StorageSectionController implements SettingsSection {
     }
 
     @FXML
+    private void onBrowseRagIndex() {
+        chooseFolder(ragIndexField, "RAG documents index folder", pending().ragIndex());
+    }
+
+    @FXML
     private void onBrowseHistory() {
         chooseDbFile(historyField, "Conversation history database", pending().historyDb());
     }
@@ -164,6 +177,7 @@ public class StorageSectionController implements SettingsSection {
         modelsField.clear();
         memoryDirField.clear();
         memoryDbField.clear();
+        ragIndexField.clear();
     }
 
     private void chooseFolder(TextField field, String title, Path current) {

@@ -194,7 +194,7 @@ public class SettingsTransfer {
 
     private static boolean looksLikeSettings(ObjectNode root) {
         Set<String> known = Set.of("model", "systemPrompt", "skills", "context", "tools", "agentLoop", "guardrails",
-                "approval", "reply", "storage", "speech", "memory");
+                "approval", "reply", "storage", "speech", "memory", "rag");
         var names = root.fieldNames();
         while (names.hasNext()) {
             if (known.contains(names.next())) {

@@ -16,6 +16,7 @@ import javafx.stage.Stage;
 import net.talaatharb.harness.config.AppModule;
 import net.talaatharb.harness.history.ConversationStore;
 import net.talaatharb.harness.memory.MemoryService;
+import net.talaatharb.harness.rag.RagService;
 import net.talaatharb.harness.tools.mcp.McpClientManager;
 import net.talaatharb.harness.ui.MainController;
 import net.talaatharb.harness.ui.UiSupport;
@@ -53,6 +54,7 @@ public class HarnessApp extends Application {
         if (injector != null) {
             injector.getInstance(McpClientManager.class).close();
             injector.getInstance(MemoryService.class).close();
+            injector.getInstance(RagService.class).close();
             injector.getInstance(ConversationStore.class).close();
         }
     }

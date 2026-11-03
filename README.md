@@ -18,6 +18,8 @@ separate **⚙ Harness** settings window, one tab per harness concern.
   Conversations are stored with [MapDB](https://github.com/jankotek/mapdb) in `~/.harness-exp/history.db`
   (package `history`). Each record is a JSON transcript plus per-turn outcomes, and the file is transactional.
   If the file is locked by another running instance, the app falls back to in-memory history and shows a warning.
+- **📚 Documents (RAG)**: a per-conversation knowledge base for large files, folders or pasted text; the button
+  shows how many documents the chat has. See [RAG](#rag-documents).
 - **🎤 Voice input**: talk instead of typing with the mic button or **Ctrl+M**. See [Voice input](#voice-input--transcription).
 - **Tool trace**: tool calls and their results are shown above the reply (toggle in **Reply & UI**).
 
@@ -31,6 +33,7 @@ separate **⚙ Harness** settings window, one tab per harness concern.
 | System prompt | Template with `{{date}}`, `{{time}}`, `{{model}}`, `{{os}}`, `{{user}}` variables | `prompt` |
 | Skills | Edits the skills folder (`~/.harness-exp/skills/<id>/SKILL.md`): new / save / delete / revert, plus **⟳ Refresh** to pick up outside edits or agent-created skills. Skills are injected always or only when trigger words match | `skills` folder |
 | Memory | Long-term memories: backend (Markdown folder or MapDB), how many go into the context, recall limit, duplicate threshold; list / search / add / edit / delete memories and copy them to the other backend. See [Memory](#memory) | `memory` |
+| RAG | Per-conversation documents: automatic context on/off, embedder (Ollama embedding model or built-in offline) with a **Test** button, chunk size/overlap, passages in context, search limits, min similarity, max file size. See [RAG](#rag-documents) | `rag` |
 | Context builder | Ordered `ContextContributor` pipeline (toggleable), history window, pinned context, attachment limits | `context` |
 | Tools + MCP | Built-in tools, enable/disable, output cap, MCP servers (stdio / streamable HTTP) with live status, test, reconnect and `mcp.json` import | `tools` |
 | Agent loop | Iteration/tool-call/duration/repeat/error limits (clamped by hard ceilings in `AgentLoopLimits`) and `HookPoint`s | `agent` |
@@ -38,7 +41,7 @@ separate **⚙ Harness** settings window, one tab per harness concern.
 | Human approval | Never / risky tools / all tools, always-allowed list, timeout (denies and closes the dialog). Tools that run agent-written code (`create_tool`, dynamic tools) or rewrite its instructions (`create_skill`) and `DANGEROUS` tools need approval on **every** call, whatever the policy, and can't be "always allowed" | `approval` |
 | Reply | Plain text or **agentic UI**: the model emits ```` ```ui ```` JSON blocks rendered as live JavaFX components | `reply` |
 | Speech | Voice input on/off, send right after dictation, transcribe audio attachments, language, max recording length, model download | `speech` |
-| Storage | External locations for the skills folder, dynamic tools folder, MapDB history file, local models folder, memory folder and memory DB (browse or type; blank = default). Applies after restart | `storage` |
+| Storage | External locations for the skills folder, dynamic tools folder, MapDB history file, local models folder, memory folder, memory DB and RAG index folder (browse or type; blank = default). Applies after restart | `storage` |
 
 ### Screenshots
 
@@ -265,6 +268,51 @@ The **memory** context stage (between skills and the tool catalog; it can be dis
 The **Memory** tab lists the memories (newest first) with search. You can add, edit, delete (with confirmation) and
 revert memories by hand, and **Copy all to …** copies every memory to the other backend, keeping the same ids.
 
+## RAG (documents)
+
+Retrieval-augmented generation for material that is too large for memories or the chat (package `rag`). Unlike
+memories, documents belong to **one conversation**.
+
+- **Adding documents**: click **📚** in the chat window. You can add files (markdown, text, code, CSV/JSON/XML/HTML,
+  PDF), a folder (recursive, up to 500 files), or pasted text, or drop files onto the window. Indexing runs in the
+  background with progress and **Cancel**. The agent can also add documents with `rag_add`.
+- **Indexing**: text is split into overlapping chunks (default 1200 characters with a 200-character overlap), cut at
+  paragraph or sentence boundaries where possible. Each chunk is embedded, and the chunks and their vectors are stored
+  in an [Apache Lucene](https://lucene.apache.org/) 9 index in `~/.harness-exp/rag-index/` (the folder can be changed
+  in **Storage**). Embeddings of up to 4096 dimensions are supported.
+- **Embedders** (set in the **RAG** tab):
+  - **Ollama** (default) uses `/api/embed` with an embedding model. Install one first:
+    `ollama pull nomic-embed-text` (alternatives: `mxbai-embed-large`, `bge-m3`, `all-minilm`). The URL defaults to the
+    Model tab's Ollama URL. Chat models can't produce embeddings, so the **Test** button reports an error for them.
+  - **Built-in** works offline with no model. It uses a hashed bag of words, so it only matches shared words.
+  - Each document records the embedder it was indexed with. After you switch embedders, documents indexed with the
+    other one are skipped (the window and the context report this) until you click **Re-index**.
+- **Retrieval**: a Lucene k-NN query over an HNSW vector index, using cosine similarity and filtered to the current
+  conversation and embedder. It considers at least 100 candidates, so a conversation with few chunks is effectively
+  searched exactly, and large collections stay fast. The **rag** context stage
+  (after memory) adds the passages most relevant to the latest message, within a character budget. Passages below the
+  minimum similarity are ignored.
+
+Tools:
+
+| Tool | Risk | What it does |
+|---|---|---|
+| `rag_search` | safe | Searches the conversation's documents (`query`, optional `limit`); an empty query lists them |
+| `rag_add` | sensitive (asks for approval under the default policy) | Indexes `text` under a `name`, or a file given as `path` |
+
+In the 📚 window you can:
+
+- try searches and see each passage's similarity score;
+- delete documents;
+- **Copy to conversation…** to copy the selected documents (or all of them) to another saved conversation, along with
+  their vectors, so nothing is re-embedded.
+
+When you delete a conversation, its documents are deleted too, and at startup the app removes documents whose
+conversation no longer exists. A new chat that only has documents is saved as soon as the 📚 window closes.
+
+The chunk text is also indexed for keyword search. Possible improvements later: hybrid keyword and vector search,
+re-ranking, and harness-wide collections.
+
 ## MCP servers
 
 **Harness → Tools & MCP** connects to [Model Context Protocol](https://modelcontextprotocol.io) servers. Their tools
@@ -355,7 +403,7 @@ java -jar target/harness-exp-0.1.0-jar-with-dependencies.jar
 ```
 
 Settings are stored in `~/.harness-exp/settings.json` (override with `-Dharness.settings=<path>`).
-Skills, dynamic tools, the history DB, local speech models and memories default to the same folder (`skills/`, `dynamic-tools/`, `history.db`, `models/`, `memory/`, `memory.db`). Each can be moved to any external location in the **Storage** section, which writes the `storage` block of settings.json. Relative paths are resolved against the settings folder and `~` is your home folder. Changes apply after a restart, and existing data is not moved. Only the default skills ship inside the jar; they are copied into an empty skills folder.
+Skills, dynamic tools, the history DB, local speech models, memories and RAG documents default to the same folder (`skills/`, `dynamic-tools/`, `history.db`, `models/`, `memory/`, `memory.db`, `rag-index/`). Each can be moved to any external location in the **Storage** section, which writes the `storage` block of settings.json. Relative paths are resolved against the settings folder and `~` is your home folder. Changes apply after a restart, and existing data is not moved. Only the default skills ship inside the jar; they are copied into an empty skills folder.
 
 Every chat message has a **⧉ Copy** button underneath it (assistant replies copy the raw model text, including
 `ui` blocks). Errors (model/tool failures, guardrail blocks, approval timeouts, malformed protocol blocks,

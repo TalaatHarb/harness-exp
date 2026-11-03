@@ -61,6 +61,7 @@ import net.talaatharb.harness.config.SettingsStore;
 import net.talaatharb.harness.context.ContextSettings;
 import net.talaatharb.harness.history.ConversationRecord;
 import net.talaatharb.harness.history.ConversationStore;
+import net.talaatharb.harness.rag.RagService;
 import net.talaatharb.harness.history.ConversationSummary;
 import net.talaatharb.harness.history.TurnRecord;
 import net.talaatharb.harness.llm.Attachment;
@@ -95,7 +96,7 @@ public class MainController {
 
     /** The open chat. Replaced (not cleared) on switch so a still-finishing run keeps writing to its own chat. */
     private ConversationRecord record = ConversationRecord.create();
-    private Conversation conversation = new Conversation();
+    private Conversation conversation = new Conversation(record.id);
     private final List<Exchange> exchanges = new ArrayList<>();
 
     /** Files attached in the composer for the next message. */
@@ -104,6 +105,7 @@ public class MainController {
     private Future<?> running;
     private AtomicBoolean cancelFlag;
     private final SpeechToText speech;
+    private final RagService rag;
     private VoiceInput voice;
 
     @FXML private ComboBox<String> modelCombo;
@@ -127,6 +129,7 @@ public class MainController {
     @FXML private Button deleteConversationButton;
     @FXML private Button renameConversationButton;
     @FXML private Label historyStatus;
+    @FXML private Button knowledgeButton;
 
     /** UI + model state of one request/response pair. */
     private static final class Exchange {
@@ -144,8 +147,9 @@ public class MainController {
 
     @Inject
     public MainController(AgentLoop agentLoop, SettingsStore store, ModelProviderRegistry providers,
-            SettingsWindow settingsWindow, ConversationStore history, SpeechToText speech) {
+            SettingsWindow settingsWindow, ConversationStore history, SpeechToText speech, RagService rag) {
         this.speech = speech;
+        this.rag = rag;
         this.agentLoop = agentLoop;
         this.store = store;
         this.providers = providers;
@@ -171,6 +175,8 @@ public class MainController {
             }
         }));
         initHistory();
+        pruneOrphanDocuments();
+        updateKnowledgeButton();
         initVoice();
         initAttachments();
         onRefreshModels();
@@ -362,7 +368,65 @@ public class MainController {
         } catch (RuntimeException e) {
             LOG.error("Could not delete conversation {}", selected.id(), e);
         }
+        try {
+            int docs = rag.deleteConversation(selected.id());
+            if (docs > 0) {
+                LOG.info("Deleted {} RAG document(s) of conversation {}", docs, selected.id());
+            }
+        } catch (RuntimeException e) {
+            LOG.error("Could not delete the documents of conversation {}", selected.id(), e);
+        }
         refreshHistory();
+    }
+
+    /** Opens the per-conversation document store (RAG). */
+    @FXML
+    private void onKnowledge() {
+        ConversationRecord rec = record;
+        new KnowledgeDialog(rag, rec.id, rec.title, history::list).showAndWait(messagesBox.getScene().getWindow());
+        if (rec == record && rec.turns.isEmpty() && !rag.documents(rec.id).isEmpty()
+                && history.load(rec.id).isEmpty()) {
+            // Save the empty chat so its documents survive a restart (orphans are pruned at start-up).
+            String title = rec.title;
+            try {
+                history.save(rec);
+            } catch (RuntimeException e) {
+                LOG.error("Could not save conversation {}", rec.id, e);
+            }
+            rec.title = title; // keep null so the first message still names the chat
+            refreshHistory();
+        }
+        updateKnowledgeButton();
+    }
+
+    private void updateKnowledgeButton() {
+        int count;
+        try {
+            count = rag.documents(record.id).size();
+        } catch (RuntimeException e) {
+            LOG.error("Could not count the documents of conversation {}", record.id, e);
+            count = 0;
+        }
+        knowledgeButton.setText(count == 0 ? "📚" : "📚 " + count);
+    }
+
+    /** Removes RAG data of conversations no longer in the history (only when the history is persistent). */
+    private void pruneOrphanDocuments() {
+        if (!history.persistent()) {
+            return;
+        }
+        executor.submit(() -> {
+            try {
+                var keep = new java.util.HashSet<String>();
+                history.list().forEach(s -> keep.add(s.id()));
+                int removed = rag.prune(keep);
+                if (removed > 0) {
+                    LOG.info("Removed {} RAG document(s) of deleted conversations", removed);
+                }
+            } catch (RuntimeException e) {
+                LOG.error("Could not prune RAG documents", e);
+            }
+        });
     }
 
     private void openConversation(String id) {
@@ -376,7 +440,7 @@ public class MainController {
     /** Switches the view to {@code rec}, rebuilding bubbles and tool traces from the stored turns. */
     private void showConversation(ConversationRecord rec) {
         record = rec;
-        conversation = new Conversation();
+        conversation = new Conversation(rec.id);
         conversation.replaceAll(rec.messages);
         exchanges.clear();
         messagesBox.getChildren().clear();
@@ -394,6 +458,7 @@ public class MainController {
         if (exchanges.isEmpty()) {
             messagesBox.getChildren().setAll(emptyLabel);
         }
+        updateKnowledgeButton();
         selectCurrentInHistory();
         inputArea.requestFocus();
     }

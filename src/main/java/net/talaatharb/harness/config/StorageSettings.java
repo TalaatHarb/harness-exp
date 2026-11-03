@@ -20,4 +20,6 @@ public class StorageSettings {
     public String memoryDir = "";
     /** MapDB memory file (MapDB memory backend). */
     public String memoryDb = "";
+    /** Lucene index folder with the per-conversation RAG documents and vectors. */
+    public String ragIndex = "";
 }

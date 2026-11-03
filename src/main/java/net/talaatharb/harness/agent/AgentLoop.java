@@ -84,6 +84,16 @@ public class AgentLoop {
     /** Runs the agent for a user message with files attached (see {@link Attachment}). */
     public AgentRunResult run(String userMessage, List<Attachment> attachments, Conversation conversation,
             AgentListener listener, AtomicBoolean cancelled) {
+        String previousScope = ConversationScope.enter(conversation.id());
+        try {
+            return runScoped(userMessage, attachments, conversation, listener, cancelled);
+        } finally {
+            ConversationScope.restore(previousScope);
+        }
+    }
+
+    private AgentRunResult runScoped(String userMessage, List<Attachment> attachments, Conversation conversation,
+            AgentListener listener, AtomicBoolean cancelled) {
         HarnessSettings settings = store.current();
         AgentRunContext ctx = new AgentRunContext(userMessage, attachments, settings, cancelled);
         AgentRunResult result;

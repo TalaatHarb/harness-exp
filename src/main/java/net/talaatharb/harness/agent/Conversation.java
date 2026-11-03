@@ -8,6 +8,21 @@ import net.talaatharb.harness.llm.ChatMessage;
 /** Thread-safe conversation memory (full transcript; the context builder decides what the model sees). */
 public class Conversation {
     private final List<ChatMessage> messages = new ArrayList<>();
+    private final String id;
+
+    public Conversation() {
+        this(null);
+    }
+
+    /** @param id the saved conversation id; scopes per-conversation data such as RAG documents */
+    public Conversation(String id) {
+        this.id = id;
+    }
+
+    /** {@code null} for throwaway conversations (e.g. tests). */
+    public String id() {
+        return id;
+    }
 
     public synchronized void add(ChatMessage message) {
         messages.add(message);

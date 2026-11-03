@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Spinner?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.Tooltip?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox fx:id="root" xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml"
+      fx:controller="net.talaatharb.harness.ui.sections.RagSectionController" spacing="10" styleClass="section">
+    <padding><Insets top="16" right="16" bottom="16" left="16"/></padding>
+    <Label text="RAG (documents)" styleClass="section-title"/>
+    <Label wrapText="true" styleClass="section-help"
+           text="Retrieval-augmented generation for material too large for memories or the chat: each conversation has its own knowledge base. Add files, folders or text with the 📚 button in the chat window; they are split into overlapping chunks, embedded and stored with their vectors (RAG database in the Storage tab). The 'rag' context stage adds the passages closest to each message, and the agent can search (rag_search) or add text and files (rag_add, needs approval). Documents can be copied to other conversations from the 📚 window."/>
+
+    <CheckBox fx:id="autoContextCheck" text="Add relevant passages to the context automatically"/>
+
+    <Label text="Embeddings" styleClass="subsection-title"/>
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Label text="Embedder"/>
+        <ComboBox fx:id="embedderCombo" prefWidth="200"/>
+        <Label fx:id="modelLabel" text="Model"/>
+        <TextField fx:id="modelField" prefColumnCount="18" promptText="nomic-embed-text"/>
+    </HBox>
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Label fx:id="baseUrlLabel" text="Ollama URL"/>
+        <TextField fx:id="baseUrlField" HBox.hgrow="ALWAYS" styleClass="mono"/>
+        <Button fx:id="testButton" text="Test" onAction="#onTest">
+            <tooltip><Tooltip text="Embed two sample sentences with these settings"/></tooltip>
+        </Button>
+    </HBox>
+    <Label fx:id="testLabel" wrapText="true" styleClass="section-help"/>
+    <Label wrapText="true" styleClass="section-help"
+           text="Ollama needs an embedding model, e.g. run 'ollama pull nomic-embed-text' (also mxbai-embed-large, bge-m3, all-minilm). The built-in embedder works offline with no model but only matches shared words. Documents keep the embedder they were indexed with: after switching, use Re-index in the 📚 window."/>
+
+    <Label text="Chunking and retrieval" styleClass="subsection-title"/>
+    <GridPane hgap="10" vgap="8">
+        <Label text="Chunk size (chars)" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+        <Spinner fx:id="chunkSizeSpinner" prefWidth="100" GridPane.rowIndex="0" GridPane.columnIndex="1"/>
+        <Label text="Overlap (chars)" GridPane.rowIndex="0" GridPane.columnIndex="2"/>
+        <Spinner fx:id="overlapSpinner" prefWidth="100" GridPane.rowIndex="0" GridPane.columnIndex="3"/>
+
+        <Label text="Passages in context" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+        <Spinner fx:id="contextSpinner" prefWidth="100" GridPane.rowIndex="1" GridPane.columnIndex="1"/>
+        <Label text="Max context chars" GridPane.rowIndex="1" GridPane.columnIndex="2"/>
+        <Spinner fx:id="contextCharsSpinner" prefWidth="100" GridPane.rowIndex="1" GridPane.columnIndex="3"/>
+
+        <Label text="rag_search max results" GridPane.rowIndex="2" GridPane.columnIndex="0"/>
+        <Spinner fx:id="searchSpinner" prefWidth="100" GridPane.rowIndex="2" GridPane.columnIndex="1"/>
+        <Label text="Min similarity (%)" GridPane.rowIndex="2" GridPane.columnIndex="2"/>
+        <Spinner fx:id="minScoreSpinner" prefWidth="100" GridPane.rowIndex="2" GridPane.columnIndex="3">
+            <tooltip><Tooltip text="Passages with a lower cosine similarity to the query are ignored"/></tooltip>
+        </Spinner>
+
+        <Label text="Max file size (MB)" GridPane.rowIndex="3" GridPane.columnIndex="0"/>
+        <Spinner fx:id="fileMbSpinner" prefWidth="100" GridPane.rowIndex="3" GridPane.columnIndex="1"/>
+    </GridPane>
+    <Label wrapText="true" styleClass="section-help"
+           text="Chunk size and overlap apply to documents added afterwards."/>
+</VBox>

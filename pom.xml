@@ -17,6 +17,7 @@
         <jackson.version>2.21.0</jackson.version>
         <ollama4j.version>1.1.7</ollama4j.version>
         <mapdb.version>3.1.0</mapdb.version>
+        <lucene.version>9.12.3</lucene.version>
         <pdfbox.version>3.0.5</pdfbox.version>
     </properties>
 
@@ -74,6 +75,13 @@
             <groupId>org.apache.pdfbox</groupId>
             <artifactId>pdfbox</artifactId>
             <version>${pdfbox.version}</version>
+        </dependency>
+
+        <!-- RAG: vector (HNSW) search index; 9.x because 10.x needs Java 21 -->
+        <dependency>
+            <groupId>org.apache.lucene</groupId>
+            <artifactId>lucene-core</artifactId>
+            <version>${lucene.version}</version>
         </dependency>
 
         <!-- Conversation history -->
@@ -137,6 +145,10 @@
                         <manifest>
                             <mainClass>net.talaatharb.harness.HarnessLauncher</mainClass>
                         </manifest>
+                        <manifestEntries>
+                            <!-- Lucene ships JDK-specific classes (META-INF/versions/*) -->
+                            <Multi-Release>true</Multi-Release>
+                        </manifestEntries>
                     </archive>
                 </configuration>
                 <executions>

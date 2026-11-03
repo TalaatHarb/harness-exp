@@ -27,6 +27,10 @@ import net.talaatharb.harness.memory.MemoryContextContributor;
 import net.talaatharb.harness.memory.MemoryService;
 import net.talaatharb.harness.memory.RecallTool;
 import net.talaatharb.harness.memory.RememberTool;
+import net.talaatharb.harness.rag.RagContextContributor;
+import net.talaatharb.harness.rag.RagIngestTool;
+import net.talaatharb.harness.rag.RagSearchTool;
+import net.talaatharb.harness.rag.RagService;
 import net.talaatharb.harness.skills.CreateSkillTool;
 import net.talaatharb.harness.skills.SkillRepository;
 import net.talaatharb.harness.llm.AnthropicModelProvider;
@@ -84,6 +88,8 @@ public class AppModule extends AbstractModule {
         tools.addBinding().to(CreateSkillTool.class);
         tools.addBinding().to(RememberTool.class);
         tools.addBinding().to(RecallTool.class);
+        tools.addBinding().to(RagSearchTool.class);
+        tools.addBinding().to(RagIngestTool.class);
         bind(McpToolSource.class).to(McpClientManager.class);
 
         Multibinder<Guardrail> guardrails = Multibinder.newSetBinder(binder(), Guardrail.class);
@@ -95,6 +101,7 @@ public class AppModule extends AbstractModule {
         context.addBinding().to(Contributors.SystemPrompt.class);
         context.addBinding().to(Contributors.Skills.class);
         context.addBinding().to(MemoryContextContributor.class);
+        context.addBinding().to(RagContextContributor.class);
         context.addBinding().to(Contributors.ToolCatalog.class);
         context.addBinding().to(Contributors.ReplyInstructions.class);
         context.addBinding().to(Contributors.PinnedContext.class);
@@ -113,9 +120,9 @@ public class AppModule extends AbstractModule {
     @Singleton
     StoragePaths storagePaths(SettingsStore store) {
         StoragePaths paths = StoragePaths.resolve(settingsPath, store.current().storage);
-        LOG.info("Storage: skills={}, dynamic tools={}, history={}, models={}, memory={}, memory db={}",
+        LOG.info("Storage: skills={}, dynamic tools={}, history={}, models={}, memory={}, memory db={}, rag index={}",
                 paths.skillsDir(), paths.dynamicToolsDir(), paths.historyDb(), paths.modelsDir(), paths.memoryDir(),
-                paths.memoryDb());
+                paths.memoryDb(), paths.ragIndex());
         return paths;
     }
 
@@ -153,6 +160,12 @@ public class AppModule extends AbstractModule {
     @Named(MemoryService.MEMORY_DB)
     Path memoryDb(StoragePaths paths) {
         return paths.memoryDb();
+    }
+
+    @Provides
+    @Named(RagService.RAG_INDEX)
+    Path ragIndex(StoragePaths paths) {
+        return paths.ragIndex();
     }
 
     /** Overridable so headless tests can auto-approve. */
