@@ -16,4 +16,8 @@ public class ToolSettings {
     public List<McpServerConfig> mcpServers = new ArrayList<>();
     /** Tool output longer than this is truncated before being fed back to the model. */
     public int maxToolOutputChars = 8_000;
+    /** How long to wait for an MCP server to start and answer {@code initialize} (npx may download it first). */
+    public int mcpConnectTimeoutSeconds = 180;
+    /** Maximum time for one MCP tool call. */
+    public int mcpToolTimeoutSeconds = 120;
 }

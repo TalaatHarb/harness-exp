@@ -47,6 +47,6 @@ class SettingsStoreTest {
     void guiceWiringResolves(@TempDir Path dir) {
         var injector = Guice.createInjector(new AppModule(dir.resolve("s.json")));
         assertNotNull(injector.getInstance(AgentLoop.class));
-        assertEquals(6, injector.getInstance(ContextBuilder.class).contributors().size());
+        assertEquals(7, injector.getInstance(ContextBuilder.class).contributors().size());
     }
 }

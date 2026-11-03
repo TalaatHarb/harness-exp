@@ -30,14 +30,15 @@ separate **⚙ Harness** settings window, one tab per harness concern.
 | Model | Provider (`ollama` local/cloud, `openai`, `anthropic`), base URL, API key, model, timeout, streaming, max output tokens. See [Cloud models](#cloud-models-openai--anthropic) | `llm` |
 | System prompt | Template with `{{date}}`, `{{time}}`, `{{model}}`, `{{os}}`, `{{user}}` variables | `prompt` |
 | Skills | Edits the skills folder (`~/.harness-exp/skills/<id>/SKILL.md`): new / save / delete / revert, plus **⟳ Refresh** to pick up outside edits or agent-created skills. Skills are injected always or only when trigger words match | `skills` folder |
+| Memory | Long-term memories: backend (Markdown folder or MapDB), how many go into the context, recall limit, duplicate threshold; list / search / add / edit / delete memories and copy them to the other backend. See [Memory](#memory) | `memory` |
 | Context builder | Ordered `ContextContributor` pipeline (toggleable), history window, pinned context, attachment limits | `context` |
-| Tools + MCP | Built-in tools, enable/disable, output cap, MCP server definitions (stdio/http) | `tools` |
+| Tools + MCP | Built-in tools, enable/disable, output cap, MCP servers (stdio / streamable HTTP) with live status, test, reconnect and `mcp.json` import | `tools` |
 | Agent loop | Iteration/tool-call/duration/repeat/error limits (clamped by hard ceilings in `AgentLoopLimits`) and `HookPoint`s | `agent` |
 | Guardrails | Input/tool-call/output guardrails: length limit, blocked terms, secret redaction | `guardrails` |
 | Human approval | Never / risky tools / all tools, always-allowed list, timeout (denies and closes the dialog). Tools that run agent-written code (`create_tool`, dynamic tools) or rewrite its instructions (`create_skill`) and `DANGEROUS` tools need approval on **every** call, whatever the policy, and can't be "always allowed" | `approval` |
 | Reply | Plain text or **agentic UI**: the model emits ```` ```ui ```` JSON blocks rendered as live JavaFX components | `reply` |
 | Speech | Voice input on/off, send right after dictation, transcribe audio attachments, language, max recording length, model download | `speech` |
-| Storage | External locations for the skills folder, dynamic tools folder, MapDB history file and local models folder (browse or type; blank = default). Applies after restart | `storage` |
+| Storage | External locations for the skills folder, dynamic tools folder, MapDB history file, local models folder, memory folder and memory DB (browse or type; blank = default). Applies after restart | `storage` |
 
 ### Screenshots
 
@@ -126,7 +127,7 @@ Protocols (provider-agnostic, plain text):
 - Generated UI: ```` ```ui {"type": "card", "text": "Title", "children": [{"type": "button", "text": "Go", "action": "message sent back"}]} ``` ````
   Supported types: column, row, card, heading, text, button, list, table, progress, badge, separator.
 
-MCP is configured but not yet connected (`UnconnectedMcpToolSource` is the placeholder to replace).
+MCP servers are connected by `tools/mcp/McpClientManager` (see [MCP servers](#mcp-servers)).
 
 Malformed `tool_call` blocks are not shown as answers; the loop sends the parse problem back to the model
 so it can retry (bounded by the iteration limit).
@@ -227,15 +228,87 @@ downloaded from Hugging Face on first use, or with **Download model now** in the
 
 - **Export** writes the settings as currently shown in the window, including unsaved edits: model, system prompt,
   context, tools and MCP, agent loop, guardrails, approval, reply and storage. You can also include the skills
-  folder and the dynamic tools' source code. The API key is left out unless you tick it.
+  folder, the dynamic tools' source code and the memories (from the backend selected in the Memory tab). The API key and MCP env/header values are left out unless you
+  tick it. `${VAR}` references are kept, since they aren't secrets.
 - **Import** accepts an export or a plain `settings.json`, and applies immediately. Each option can be ticked or
   unticked:
   - keep your current API key (on by default);
   - keep your current storage folders (on by default);
   - import skills (same-name skills are replaced);
-  - import dynamic tools. This is off by default because the tools are compiled and run as code.
+  - import dynamic tools. This is off by default because the tools are compiled and run as code;
+  - import memories into the memory backend in use after the import (same-id memories are replaced).
 
   Items that fail are listed in the import report and the rest are still imported.
+
+## Memory
+
+Long-term memory that persists across conversations (package `memory`). Two backends are available; pick one in the
+**Memory** tab:
+
+- **Markdown** (default): one `<id>.md` file per memory in the memory folder. Each file has a small front matter block
+  (`tags`, `source`, `created`, `updated`) followed by the memory text. You can edit or add files by hand; files without
+  front matter are read as plain text.
+- **MapDB**: entries stored in a single `memory.db` file.
+
+Both locations are set in the **Storage** tab (default `~/.harness-exp/memory/` and `~/.harness-exp/memory.db`).
+
+Tools for the agent:
+
+| Tool | Risk | What it does |
+|---|---|---|
+| `remember` | sensitive (asks for approval under the default policy) | Saves `text` with optional `tags`. If an existing memory already covers it (word overlap ≥ the duplicate threshold, default 80%), nothing new is added and only new tags are merged. If the new text covers an existing memory, that memory is updated instead. `replace_id` rewrites a specific memory, e.g. to correct an outdated fact |
+| `recall` | safe | Searches memories by `query` (ranked by rare-word overlap and tags; empty query = most recent) and returns up to `limit` results with their ids |
+
+The **memory** context stage (between skills and the tool catalog; it can be disabled in Context builder) adds up to
+*N* memories relevant to the latest user message to the system prompt. It adds nothing when none match.
+
+The **Memory** tab lists the memories (newest first) with search. You can add, edit, delete (with confirmation) and
+revert memories by hand, and **Copy all to …** copies every memory to the other backend, keeping the same ids.
+
+## MCP servers
+
+**Harness → Tools & MCP** connects to [Model Context Protocol](https://modelcontextprotocol.io) servers. Their tools
+join the tool list next to the built-in and dynamic tools, and the model calls them with the same `tool_call`
+block. The client is in `tools/mcp`: plain JSON-RPC 2.0, protocol `2025-06-18`, with no extra dependency.
+
+| Transport | Command / URL | Env / headers |
+|-----------|---------------|---------------|
+| `STDIO` | Command line that starts the server, e.g. `npx -y @modelcontextprotocol/server-filesystem "C:\My Docs"` or `uvx mcp-server-fetch` | Environment variables for the process |
+| `HTTP` (streamable HTTP) | Endpoint URL, e.g. `https://api.githubcopilot.com/mcp/` | HTTP headers, e.g. `Authorization: Bearer ${GITHUB_TOKEN}` |
+
+- **Env / headers** are entered as `KEY=VALUE; KEY2=VALUE2`. Write `${VAR}` (or `${env:VAR}`) to read the value
+  from the harness's own environment when connecting, so the secret isn't stored in `settings.json`.
+- **Add / update** adds a server, or replaces the one with the same name. Select a row to edit it.
+- **Apply** connects all enabled servers in the background. The *Status* column updates live, for example
+  `connected · 14 tool(s) · secure-filesystem-server 1.0.0` or `failed: …`. Failures include the server's last
+  stderr lines and are logged.
+- **Test** connects once using the fields, or the selected row, and lists the server's tools without saving.
+- **Reconnect selected** restarts a server, for example after it crashed.
+- **Import mcp.json…** reads Claude Desktop (`"mcpServers"`), VS Code (`"servers"`) or similar files: `command` +
+  `args` + `env`, or `url` + `headers`, and `"disabled": true`.
+- **Timeouts:** *Connect timeout* (default 180 s, because `npx`/`uvx` may download the server on first use) and
+  *Tool call timeout* (default 120 s; a call that times out is cancelled on the server).
+- **Risk and approval** come from the server's tool annotations: `readOnlyHint` → SAFE, `destructiveHint` →
+  DANGEROUS, anything else → SENSITIVE. The usual Human approval and Guardrails rules then apply.
+- If two servers have a tool with the same name, the later one is renamed `<server>_<tool>`. A server that sends
+  `notifications/tools/list_changed` gets its tool list refreshed.
+- Servers are started only while **Enable tool calling** is on, and are stopped when the app exits, including the
+  child processes started by `cmd /c npx …`.
+- On Windows, commands that aren't `.exe` (`npx`, `uvx`, `.cmd`/`.bat`) are run through `cmd.exe /c`
+  automatically.
+- **Not supported:** the legacy HTTP+SSE transport (`GET /sse`), resources, prompts and sampling. Only tools are
+  used. Use [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) as a stdio bridge for old SSE-only servers.
+
+Example: an `mcp.json` you can import.
+
+```json
+{
+  "mcpServers": {
+    "filesystem": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:\\work"] },
+    "github": { "url": "https://api.githubcopilot.com/mcp/", "headers": { "Authorization": "Bearer ${GITHUB_TOKEN}" } }
+  }
+}
+```
 
 ## Cloud models (OpenAI / Anthropic)
 
@@ -282,7 +355,7 @@ java -jar target/harness-exp-0.1.0-jar-with-dependencies.jar
 ```
 
 Settings are stored in `~/.harness-exp/settings.json` (override with `-Dharness.settings=<path>`).
-Skills, dynamic tools, the history DB and local speech models default to the same folder (`skills/`, `dynamic-tools/`, `history.db`, `models/`). Each can be moved to any external location in the **Storage** section, which writes the `storage` block of settings.json. Relative paths are resolved against the settings folder and `~` is your home folder. Changes apply after a restart, and existing data is not moved. Only the default skills ship inside the jar; they are copied into an empty skills folder.
+Skills, dynamic tools, the history DB, local speech models and memories default to the same folder (`skills/`, `dynamic-tools/`, `history.db`, `models/`, `memory/`, `memory.db`). Each can be moved to any external location in the **Storage** section, which writes the `storage` block of settings.json. Relative paths are resolved against the settings folder and `~` is your home folder. Changes apply after a restart, and existing data is not moved. Only the default skills ship inside the jar; they are copied into an empty skills folder.
 
 Every chat message has a **⧉ Copy** button underneath it (assistant replies copy the raw model text, including
 `ui` blocks). Errors (model/tool failures, guardrail blocks, approval timeouts, malformed protocol blocks,

@@ -10,16 +10,23 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import net.talaatharb.harness.memory.MapDbMemoryStore;
+import net.talaatharb.harness.memory.MarkdownMemoryStore;
+import net.talaatharb.harness.memory.MemoryEntry;
+import net.talaatharb.harness.memory.MemoryService;
+import net.talaatharb.harness.memory.MemorySettings;
 import net.talaatharb.harness.skills.SkillDefinition;
 import net.talaatharb.harness.skills.SkillRepository;
 import net.talaatharb.harness.tools.builtin.CurrentTimeTool;
 import net.talaatharb.harness.tools.dynamic.DynamicToolRegistry;
 import net.talaatharb.harness.tools.dynamic.DynamicToolSpec;
+import net.talaatharb.harness.tools.mcp.McpServerConfig;
 
 class SettingsTransferTest {
     private static final String SOURCE = """
@@ -122,5 +129,57 @@ class SettingsTransferTest {
         assertThrows(IOException.class, () -> target.transfer().read(other));
         Files.writeString(other, "{\"format\":\"harness-exp/settings\",\"version\":99}");
         assertThrows(IOException.class, () -> target.transfer().read(other));
+    }
+
+    @Test
+    void stripsMcpSecretsUnlessTheApiKeyIsExported() {
+        Env source = env("mcp");
+        HarnessSettings s = source.store().copy();
+        s.tools.mcpServers.add(new McpServerConfig("gh", McpServerConfig.Transport.HTTP, "", "https://x/mcp", true,
+                Map.of("Authorization", "Bearer ghp_secret", "X-Token", "${GH_TOKEN}")));
+        source.store().replace(s);
+
+        McpServerConfig stripped = source.transfer().export(source.store().current(),
+                SettingsTransfer.ExportOptions.defaults()).settings.tools.mcpServers.get(0);
+        assertEquals("", stripped.env.get("Authorization"));
+        assertEquals("${GH_TOKEN}", stripped.env.get("X-Token"));
+        assertEquals("Bearer ghp_secret", source.store().current().tools.mcpServers.get(0).env.get("Authorization"));
+
+        McpServerConfig kept = source.transfer().export(source.store().current(),
+                new SettingsTransfer.ExportOptions(true, true, true)).settings.tools.mcpServers.get(0);
+        assertEquals("Bearer ghp_secret", kept.env.get("Authorization"));
+    }
+
+    @Test
+    void exportsMemoriesOfTheSelectedBackendAndImportsThemIntoTheActiveOne() throws Exception {
+        Env a = env("mem-source");
+        Env b = env("mem-target");
+        Path base = dir.resolve("mem");
+        try (MemoryService from = new MemoryService(() -> a.store().current().memory,
+                new MarkdownMemoryStore(base.resolve("a")), new MapDbMemoryStore(base.resolve("a.db")));
+                MemoryService to = new MemoryService(() -> b.store().current().memory,
+                        new MarkdownMemoryStore(base.resolve("b")), new MapDbMemoryStore(base.resolve("b.db")))) {
+            from.active().save(new MemoryEntry("Deploys happen on Thursdays", List.of("ops"), "user"));
+            SettingsTransfer exporter = new SettingsTransfer(a.store(), a.skills(), a.tools(), Set::of, from);
+            SettingsBundle bundle = exporter.export(a.store().current(), SettingsTransfer.ExportOptions.defaults());
+            assertEquals(1, bundle.memories.size());
+            assertTrue(exporter.export(a.store().current(),
+                    new SettingsTransfer.ExportOptions(true, true, false, false)).memories.isEmpty());
+            Path file = dir.resolve("memories.json");
+            exporter.write(bundle, file);
+
+            HarnessSettings mine = b.store().copy();
+            mine.memory.backend = MemorySettings.Backend.MAPDB;
+            b.store().replace(mine);
+            SettingsTransfer importer = new SettingsTransfer(b.store(), b.skills(), b.tools(), Set::of, to);
+            SettingsBundle read = importer.read(file);
+            var result = importer.apply(read, new SettingsTransfer.ImportOptions(false, true, true, false, false, true));
+            assertTrue(result.errors().isEmpty(), result.errors().toString());
+            List<MemoryEntry> imported = to.store(MemorySettings.Backend.MAPDB).list();
+            assertEquals(1, imported.size());
+            assertEquals("Deploys happen on Thursdays", imported.get(0).text);
+            assertEquals(bundle.memories.get(0).id, imported.get(0).id);
+            assertTrue(to.store(MemorySettings.Backend.MARKDOWN).list().isEmpty());
+        }
     }
 }

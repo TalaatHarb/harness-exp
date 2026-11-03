@@ -26,6 +26,7 @@ import net.talaatharb.harness.ui.sections.AgentLoopSectionController;
 import net.talaatharb.harness.ui.sections.ApprovalSectionController;
 import net.talaatharb.harness.ui.sections.ContextSectionController;
 import net.talaatharb.harness.ui.sections.GuardrailsSectionController;
+import net.talaatharb.harness.ui.sections.MemorySectionController;
 import net.talaatharb.harness.ui.sections.ModelSectionController;
 import net.talaatharb.harness.ui.sections.ReplySectionController;
 import net.talaatharb.harness.ui.sections.SettingsSection;
@@ -46,6 +47,7 @@ public class SettingsController {
     @FXML private ModelSectionController modelSectionController;
     @FXML private SystemPromptSectionController systemPromptSectionController;
     @FXML private SkillsSectionController skillsSectionController;
+    @FXML private MemorySectionController memorySectionController;
     @FXML private ContextSectionController contextSectionController;
     @FXML private ToolsSectionController toolsSectionController;
     @FXML private AgentLoopSectionController agentLoopSectionController;
@@ -64,7 +66,7 @@ public class SettingsController {
     @FXML
     private void initialize() {
         sections = List.of(modelSectionController, systemPromptSectionController, skillsSectionController,
-                contextSectionController, toolsSectionController, agentLoopSectionController,
+                memorySectionController, contextSectionController, toolsSectionController, agentLoopSectionController,
                 guardrailsSectionController, approvalSectionController, replySectionController,
                 speechSectionController, storageSectionController);
         sections.forEach(s -> s.setDraftSource(this::collect));
@@ -119,12 +121,14 @@ public class SettingsController {
     private void onExport() {
         CheckBox skills = new CheckBox("Skills (skills folder contents)");
         CheckBox tools = new CheckBox("Dynamic tools (source code)");
-        CheckBox apiKey = new CheckBox("API key (it's a secret: only share the file with care)");
+        CheckBox memories = new CheckBox("Memories (from the backend selected in the Memory tab)");
+        memories.setSelected(true);
+        CheckBox apiKey = new CheckBox("API key and MCP env/header values (secrets: only share the file with care)");
         skills.setSelected(true);
         tools.setSelected(true);
         Dialog<ButtonType> dialog = optionsDialog("Export harness settings",
                 "Exports the settings as currently shown in this window (including unsaved edits).",
-                skills, tools, apiKey);
+                skills, tools, memories, apiKey);
         if (dialog.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
             return;
         }
@@ -136,10 +140,10 @@ public class SettingsController {
         }
         try {
             SettingsBundle bundle = transfer.export(collect(), new SettingsTransfer.ExportOptions(
-                    skills.isSelected(), tools.isSelected(), apiKey.isSelected()));
+                    skills.isSelected(), tools.isSelected(), apiKey.isSelected(), memories.isSelected()));
             transfer.write(bundle, file.toPath());
             info("Exported", "Saved to " + file + "\n" + bundle.skills.size() + " skill(s), "
-                    + bundle.dynamicTools.size() + " dynamic tool(s).");
+                    + bundle.dynamicTools.size() + " dynamic tool(s), " + bundle.memories.size() + " memories.");
         } catch (IOException | RuntimeException e) {
             LOG.error("Export to {} failed", file, e);
             error("Export failed", e.getMessage());
@@ -166,7 +170,11 @@ public class SettingsController {
         CheckBox skills = new CheckBox("Skills (" + bundle.skills.size() + "; same-name skills are replaced)");
         CheckBox tools = new CheckBox("Dynamic tools (" + bundle.dynamicTools.size()
                 + ") ⚠ compiles and runs Java code from the file");
+        CheckBox memories = new CheckBox("Memories (" + bundle.memories.size()
+                + "; into the memory backend in use after import; same-id memories are replaced)");
         SettingsTransfer.ImportOptions defaults = SettingsTransfer.ImportOptions.defaults();
+        memories.setSelected(defaults.memories() && !bundle.memories.isEmpty());
+        memories.setDisable(bundle.memories.isEmpty());
         settings.setSelected(defaults.settings());
         keepKey.setSelected(defaults.keepApiKey());
         keepStorage.setSelected(defaults.keepStorage());
@@ -179,13 +187,13 @@ public class SettingsController {
         Dialog<ButtonType> dialog = optionsDialog("Import harness settings",
                 "Import from " + file.getName() + (bundle.exportedAt == null ? "" : " (exported " + bundle.exportedAt
                         + ")") + ".\nThis applies immediately and replaces the current values.",
-                settings, keepKey, keepStorage, skills, tools);
+                settings, keepKey, keepStorage, skills, tools, memories);
         if (dialog.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
             return;
         }
         SettingsTransfer.ImportReport report = transfer.apply(bundle, new SettingsTransfer.ImportOptions(
                 settings.isSelected(), keepKey.isSelected(), keepStorage.isSelected(), skills.isSelected(),
-                tools.isSelected()));
+                tools.isSelected(), memories.isSelected()));
         load(store.copy());
         if (report.errors().isEmpty()) {
             info("Imported", report.summary());

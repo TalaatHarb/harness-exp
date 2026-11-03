@@ -5,12 +5,13 @@ import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
+import net.talaatharb.harness.memory.MemoryEntry;
 import net.talaatharb.harness.skills.SkillDefinition;
 import net.talaatharb.harness.tools.dynamic.DynamicToolSpec;
 
 /**
- * Everything that makes up a harness setup in one JSON document: the settings plus the skills folder contents and the
- * dynamic tools. Written by "Export…" and read by "Import…" in the Harness window.
+ * Everything that makes up a harness setup in one JSON document: the settings plus the skills folder contents, the
+ * dynamic tools and the memories. Written by "Export…" and read by "Import…" in the Harness window.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class SettingsBundle {
@@ -23,4 +24,5 @@ public class SettingsBundle {
     public HarnessSettings settings = new HarnessSettings();
     public List<SkillDefinition> skills = new ArrayList<>();
     public List<DynamicToolSpec> dynamicTools = new ArrayList<>();
+    public List<MemoryEntry> memories = new ArrayList<>();
 }

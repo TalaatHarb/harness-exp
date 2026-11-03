@@ -9,6 +9,7 @@
 <?import javafx.scene.control.TableColumn?>
 <?import javafx.scene.control.TableView?>
 <?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.Tooltip?>
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
 
@@ -38,21 +39,41 @@
     </HBox>
     <Label text="MCP servers" styleClass="section-title"/>
     <Label wrapText="true" styleClass="section-help"
-           text="Configure Model Context Protocol servers. Their tools appear above once an McpToolSource client implementation is bound (currently a placeholder)."/>
+           text="Model Context Protocol servers: stdio (a command the harness starts, e.g. npx -y @modelcontextprotocol/server-filesystem C:\work) or streamable HTTP (a URL). Their tools appear in the table above once connected. Env (stdio) / headers (HTTP) take KEY=VALUE; KEY2=VALUE2 — use ${VAR} to read a secret from the environment instead of storing it."/>
     <TableView fx:id="mcpTable" editable="true" VBox.vgrow="ALWAYS" prefHeight="140">
         <columns>
             <TableColumn fx:id="mcpEnabledCol" text="On" prefWidth="40"/>
             <TableColumn fx:id="mcpNameCol" text="Name" prefWidth="130"/>
             <TableColumn fx:id="mcpTransportCol" text="Transport" prefWidth="80"/>
-            <TableColumn fx:id="mcpEndpointCol" text="Command / URL" prefWidth="300"/>
-            <TableColumn fx:id="mcpStatusCol" text="Status" prefWidth="200"/>
+            <TableColumn fx:id="mcpEndpointCol" text="Command / URL" prefWidth="260"/>
+            <TableColumn fx:id="mcpEnvCol" text="Env / headers" prefWidth="110"/>
+            <TableColumn fx:id="mcpStatusCol" text="Status" prefWidth="260"/>
         </columns>
     </TableView>
     <HBox spacing="6" alignment="CENTER_LEFT">
         <TextField fx:id="mcpNameField" promptText="name" prefWidth="120"/>
         <ComboBox fx:id="mcpTransportCombo" prefWidth="90"/>
         <TextField fx:id="mcpEndpointField" promptText="command (stdio) or URL (http)" HBox.hgrow="ALWAYS"/>
-        <Button text="Add server" onAction="#onAddServer"/>
+    </HBox>
+    <HBox spacing="6" alignment="CENTER_LEFT">
+        <TextField fx:id="mcpEnvField" promptText="env (stdio) / headers (http): KEY=VALUE; Authorization=Bearer ${TOKEN}" HBox.hgrow="ALWAYS"/>
+        <Button fx:id="mcpAddButton" text="Add server" onAction="#onAddServer"/>
         <Button text="Remove selected" onAction="#onRemoveServer"/>
     </HBox>
+    <HBox spacing="6" alignment="CENTER_LEFT">
+        <Button fx:id="mcpTestButton" text="Test" onAction="#onTestServer">
+            <tooltip><Tooltip text="Connect to the server in the fields above once and list its tools"/></tooltip>
+        </Button>
+        <Button text="Reconnect selected" onAction="#onReconnectServer">
+            <tooltip><Tooltip text="Restart the connection of an applied server"/></tooltip>
+        </Button>
+        <Button text="Import mcp.json…" onAction="#onImportMcpJson">
+            <tooltip><Tooltip text="Add servers from a Claude Desktop / VS Code / Cursor style mcp.json file"/></tooltip>
+        </Button>
+        <Label text="Connect timeout (s)"/>
+        <Spinner fx:id="mcpConnectTimeoutSpinner" editable="true" prefWidth="80"/>
+        <Label text="Tool call timeout (s)"/>
+        <Spinner fx:id="mcpToolTimeoutSpinner" editable="true" prefWidth="80"/>
+    </HBox>
+    <Label fx:id="mcpMessageLabel" wrapText="true" styleClass="section-help"/>
 </VBox>

@@ -16,4 +16,8 @@ public class StorageSettings {
     public String historyDb = "";
     /** Downloaded local models, e.g. the Whistle speech-to-text engine and model. */
     public String modelsDir = "";
+    /** Folder of {@code <id>.md} memories (markdown memory backend). */
+    public String memoryDir = "";
+    /** MapDB memory file (MapDB memory backend). */
+    public String memoryDb = "";
 }

@@ -47,7 +47,7 @@ import net.talaatharb.harness.tools.builtin.CurrentTimeTool;
 import net.talaatharb.harness.tools.builtin.ReadFileTool;
 import net.talaatharb.harness.tools.dynamic.CreateToolTool;
 import net.talaatharb.harness.tools.dynamic.DynamicToolRegistry;
-import net.talaatharb.harness.tools.mcp.UnconnectedMcpToolSource;
+import net.talaatharb.harness.tools.mcp.McpToolSource;
 
 class AgentLoopTest {
 
@@ -122,7 +122,7 @@ class AgentLoopTest {
         ToolRegistry tools = new ToolRegistry(Set.of(new CurrentTimeTool(), new ReadFileTool(),
                 new CreateToolTool(dynamic, () -> Set.of(new CurrentTimeTool(), new ReadFileTool())),
                 new CreateSkillTool(skillsRef())),
-                new UnconnectedMcpToolSource(), dynamic);
+                McpToolSource.NONE, dynamic);
         ContextBuilder context = new ContextBuilder(Set.of(new Contributors.SystemPrompt(), new Contributors.Skills(skills),
                 new Contributors.ToolCatalog(tools), new Contributors.HistoryWindow()));
         GuardrailService guardrails = new GuardrailService(Set.of(new InputLengthGuardrail(),

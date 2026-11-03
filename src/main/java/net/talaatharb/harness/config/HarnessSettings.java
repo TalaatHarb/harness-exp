@@ -10,6 +10,7 @@ import net.talaatharb.harness.approval.ApprovalSettings;
 import net.talaatharb.harness.context.ContextSettings;
 import net.talaatharb.harness.guardrails.GuardrailSettings;
 import net.talaatharb.harness.llm.ModelSettings;
+import net.talaatharb.harness.memory.MemorySettings;
 import net.talaatharb.harness.prompt.SystemPromptSettings;
 import net.talaatharb.harness.reply.ReplySettings;
 import net.talaatharb.harness.skills.SkillDefinition;
@@ -38,4 +39,5 @@ public class HarnessSettings {
     public ReplySettings reply = new ReplySettings();
     public StorageSettings storage = new StorageSettings();
     public SpeechSettings speech = new SpeechSettings();
+    public MemorySettings memory = new MemorySettings();
 }

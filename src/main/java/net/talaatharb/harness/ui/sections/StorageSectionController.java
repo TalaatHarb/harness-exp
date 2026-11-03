@@ -18,7 +18,7 @@ import net.talaatharb.harness.config.SettingsStore;
 import net.talaatharb.harness.config.StoragePaths;
 import net.talaatharb.harness.config.StorageSettings;
 
-/** Picks external locations for skills, dynamic tools and the history DB. They take effect after a restart. */
+/** Picks external locations for skills, dynamic tools, history, memories and models. They take effect after a restart. */
 public class StorageSectionController implements SettingsSection {
     private final Path settingsPath;
     private final StoragePaths inUse;
@@ -33,6 +33,10 @@ public class StorageSectionController implements SettingsSection {
     @FXML private Label skillsInUse;
     @FXML private Label toolsInUse;
     @FXML private Label historyInUse;
+    @FXML private TextField memoryDirField;
+    @FXML private TextField memoryDbField;
+    @FXML private Label memoryDirInUse;
+    @FXML private Label memoryDbInUse;
     @FXML private Label restartLabel;
 
     @Inject
@@ -56,6 +60,12 @@ public class StorageSectionController implements SettingsSection {
         skillsField.textProperty().addListener((o, a, b) -> updateRestartNotice());
         toolsField.textProperty().addListener((o, a, b) -> updateRestartNotice());
         historyField.textProperty().addListener((o, a, b) -> updateRestartNotice());
+        memoryDirField.setPromptText(defaults.memoryDir() + "  (default)");
+        memoryDbField.setPromptText(defaults.memoryDb() + "  (default)");
+        memoryDirInUse.setText("In use: " + inUse.memoryDir());
+        memoryDbInUse.setText("In use: " + inUse.memoryDb());
+        memoryDirField.textProperty().addListener((o, a, b) -> updateRestartNotice());
+        memoryDbField.textProperty().addListener((o, a, b) -> updateRestartNotice());
     }
 
     @Override
@@ -65,6 +75,8 @@ public class StorageSectionController implements SettingsSection {
         toolsField.setText(s.dynamicToolsDir);
         historyField.setText(s.historyDb);
         modelsField.setText(s.modelsDir);
+        memoryDirField.setText(s.memoryDir);
+        memoryDbField.setText(s.memoryDb);
         updateRestartNotice();
     }
 
@@ -77,6 +89,8 @@ public class StorageSectionController implements SettingsSection {
         settings.storage.dynamicToolsDir = toolsField.getText().strip();
         settings.storage.historyDb = historyField.getText().strip();
         settings.storage.modelsDir = modelsField.getText().strip();
+        settings.storage.memoryDir = memoryDirField.getText().strip();
+        settings.storage.memoryDb = memoryDbField.getText().strip();
     }
 
     private StoragePaths pending() {
@@ -85,6 +99,8 @@ public class StorageSectionController implements SettingsSection {
         s.dynamicToolsDir = toolsField.getText();
         s.historyDb = historyField.getText();
         s.modelsDir = modelsField.getText();
+        s.memoryDir = memoryDirField.getText();
+        s.memoryDb = memoryDbField.getText();
         return StoragePaths.resolve(settingsPath, s);
     }
 
@@ -110,10 +126,23 @@ public class StorageSectionController implements SettingsSection {
     }
 
     @FXML
+    private void onBrowseMemoryDir() {
+        chooseFolder(memoryDirField, "Memory folder", pending().memoryDir());
+    }
+
+    @FXML
+    private void onBrowseMemoryDb() {
+        chooseDbFile(memoryDbField, "Memory database", pending().memoryDb());
+    }
+
+    @FXML
     private void onBrowseHistory() {
+        chooseDbFile(historyField, "Conversation history database", pending().historyDb());
+    }
+
+    private void chooseDbFile(TextField field, String title, Path current) {
         FileChooser chooser = new FileChooser();
-        chooser.setTitle("Conversation history database");
-        Path current = pending().historyDb();
+        chooser.setTitle(title);
         File folder = existingFolder(current.getParent());
         if (folder != null) {
             chooser.setInitialDirectory(folder);
@@ -123,7 +152,7 @@ public class StorageSectionController implements SettingsSection {
                 new FileChooser.ExtensionFilter("All files", "*.*"));
         File file = chooser.showSaveDialog(root.getScene().getWindow());
         if (file != null) {
-            historyField.setText(file.getAbsolutePath());
+            field.setText(file.getAbsolutePath());
         }
     }
 
@@ -133,6 +162,8 @@ public class StorageSectionController implements SettingsSection {
         toolsField.clear();
         historyField.clear();
         modelsField.clear();
+        memoryDirField.clear();
+        memoryDbField.clear();
     }
 
     private void chooseFolder(TextField field, String title, Path current) {

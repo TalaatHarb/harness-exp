@@ -23,6 +23,10 @@ import net.talaatharb.harness.guardrails.Guardrail;
 import net.talaatharb.harness.guardrails.InputLengthGuardrail;
 import net.talaatharb.harness.guardrails.SecretRedactionGuardrail;
 import net.talaatharb.harness.history.ConversationStore;
+import net.talaatharb.harness.memory.MemoryContextContributor;
+import net.talaatharb.harness.memory.MemoryService;
+import net.talaatharb.harness.memory.RecallTool;
+import net.talaatharb.harness.memory.RememberTool;
 import net.talaatharb.harness.skills.CreateSkillTool;
 import net.talaatharb.harness.skills.SkillRepository;
 import net.talaatharb.harness.llm.AnthropicModelProvider;
@@ -37,7 +41,7 @@ import net.talaatharb.harness.tools.builtin.ReadFileTool;
 import net.talaatharb.harness.tools.dynamic.CreateToolTool;
 import net.talaatharb.harness.tools.dynamic.DynamicToolRegistry;
 import net.talaatharb.harness.tools.mcp.McpToolSource;
-import net.talaatharb.harness.tools.mcp.UnconnectedMcpToolSource;
+import net.talaatharb.harness.tools.mcp.McpClientManager;
 import net.talaatharb.harness.ui.DialogApprovalGateway;
 
 /**
@@ -78,7 +82,9 @@ public class AppModule extends AbstractModule {
         tools.addBinding().to(ReadFileTool.class);
         tools.addBinding().to(CreateToolTool.class);
         tools.addBinding().to(CreateSkillTool.class);
-        bind(McpToolSource.class).to(UnconnectedMcpToolSource.class);
+        tools.addBinding().to(RememberTool.class);
+        tools.addBinding().to(RecallTool.class);
+        bind(McpToolSource.class).to(McpClientManager.class);
 
         Multibinder<Guardrail> guardrails = Multibinder.newSetBinder(binder(), Guardrail.class);
         guardrails.addBinding().to(InputLengthGuardrail.class);
@@ -88,6 +94,7 @@ public class AppModule extends AbstractModule {
         Multibinder<ContextContributor> context = Multibinder.newSetBinder(binder(), ContextContributor.class);
         context.addBinding().to(Contributors.SystemPrompt.class);
         context.addBinding().to(Contributors.Skills.class);
+        context.addBinding().to(MemoryContextContributor.class);
         context.addBinding().to(Contributors.ToolCatalog.class);
         context.addBinding().to(Contributors.ReplyInstructions.class);
         context.addBinding().to(Contributors.PinnedContext.class);
@@ -106,8 +113,9 @@ public class AppModule extends AbstractModule {
     @Singleton
     StoragePaths storagePaths(SettingsStore store) {
         StoragePaths paths = StoragePaths.resolve(settingsPath, store.current().storage);
-        LOG.info("Storage: skills={}, dynamic tools={}, history={}, models={}", paths.skillsDir(), paths.dynamicToolsDir(),
-                paths.historyDb(), paths.modelsDir());
+        LOG.info("Storage: skills={}, dynamic tools={}, history={}, models={}, memory={}, memory db={}",
+                paths.skillsDir(), paths.dynamicToolsDir(), paths.historyDb(), paths.modelsDir(), paths.memoryDir(),
+                paths.memoryDb());
         return paths;
     }
 
@@ -133,6 +141,18 @@ public class AppModule extends AbstractModule {
     @Named(WhistleSpeechToText.MODELS_DIR)
     Path modelsDir(StoragePaths paths) {
         return paths.modelsDir();
+    }
+
+    @Provides
+    @Named(MemoryService.MEMORY_DIR)
+    Path memoryDir(StoragePaths paths) {
+        return paths.memoryDir();
+    }
+
+    @Provides
+    @Named(MemoryService.MEMORY_DB)
+    Path memoryDb(StoragePaths paths) {
+        return paths.memoryDb();
     }
 
     /** Overridable so headless tests can auto-approve. */

@@ -12,7 +12,7 @@
     <padding><Insets top="16" right="16" bottom="16" left="16"/></padding>
     <Label text="Storage" styleClass="section-title"/>
     <Label wrapText="true" styleClass="section-help"
-           text="Where skills, agent-built tools, the conversation history and downloaded local models are kept. Leave a field empty for the default next to settings.json. Relative paths are resolved against the settings folder and ~ is your home folder. A shared or synced folder works too. Changes apply after a restart, and existing data is not moved: copy it to the new location yourself."/>
+           text="Where skills, agent-built tools, the conversation history, memories and downloaded local models are kept. Leave a field empty for the default next to settings.json. Relative paths are resolved against the settings folder and ~ is your home folder. A shared or synced folder works too. Changes apply after a restart, and existing data is not moved: copy it to the new location yourself."/>
 
     <Label text="Skills folder (&lt;id&gt;/SKILL.md)"/>
     <HBox spacing="6">
@@ -41,6 +41,20 @@
         <Button text="Browse…" onAction="#onBrowseModels"/>
     </HBox>
     <Label fx:id="modelsInUse" styleClass="section-help"/>
+
+    <Label text="Memory folder (&lt;id&gt;.md, markdown memory backend)"/>
+    <HBox spacing="6">
+        <TextField fx:id="memoryDirField" HBox.hgrow="ALWAYS" styleClass="mono"/>
+        <Button text="Browse…" onAction="#onBrowseMemoryDir"/>
+    </HBox>
+    <Label fx:id="memoryDirInUse" styleClass="section-help"/>
+
+    <Label text="Memory database (MapDB file, MapDB memory backend)"/>
+    <HBox spacing="6">
+        <TextField fx:id="memoryDbField" HBox.hgrow="ALWAYS" styleClass="mono"/>
+        <Button text="Browse…" onAction="#onBrowseMemoryDb"/>
+    </HBox>
+    <Label fx:id="memoryDbInUse" styleClass="section-help"/>
 
     <HBox spacing="8">
         <Button text="Use defaults" onAction="#onUseDefaults"/>
