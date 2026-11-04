@@ -466,6 +466,8 @@ Settings exports and suite definitions are omitted from the list. **Refresh** pi
 opens another report directory. The viewer is read-only and never executes model-generated UI or tool actions.
 Manual-review text describes an assessment still needed, not a judge-model score.
 
+![Benchmark run viewer showing the selected run, model, conclusion, prompts, responses and assessments](img/Benchmark.PNG)
+
 `--benchmark` without a name still runs the conversational suite. To add another benchmark, save the same JSON
 suite format as `benchmark\travel-suite.json`, then use `--benchmark travel`. Alternatively, `--benchmark --suite
 PATH` selects any suite file; do not combine a named benchmark with `--suite`.
