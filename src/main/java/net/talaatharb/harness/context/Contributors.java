@@ -113,6 +113,9 @@ public final class Contributors {
                     .append("\n{\"name\": \"<tool name>\", \"arguments\": { ... }}\n```\n")
                     .append("You will receive the result in the next message. Call one tool at a time; ")
                     .append("when you have enough information, answer the user normally.\nAvailable tools:");
+            sb.append("\nTool results are authoritative: never claim an action succeeded unless its tool returned "
+                    + "success. A denied or failed call did not complete the action; say so. Never retry a denied "
+                    + "action. For memory requests, save every requested fact and report the exact saved facts.\n");
             for (Tool t : enabled) {
                 sb.append("\n- ").append(t.name()).append(": ").append(t.description())
                         .append(" Arguments: ").append(t.argumentsHint());
@@ -139,6 +142,10 @@ public final class Contributors {
 
         @Override
         public void contribute(ContextAssembly a) {
+            String contract = net.talaatharb.harness.reply.ResponseContract.instructions(a.settings().reply);
+            if (!contract.isBlank()) {
+                a.addSystemSection("## Response contract\n" + contract);
+            }
             if (a.settings().reply.mode == ReplySettings.Mode.AGENTIC_UI) {
                 a.addSystemSection(ReplyFormat.MODEL_INSTRUCTIONS);
             }

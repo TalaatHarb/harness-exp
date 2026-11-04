@@ -6,6 +6,10 @@ public final class HarnessLauncher {
     }
 
     public static void main(String[] args) {
-        HarnessApp.main(args);
+        if (args.length > 0 && "--benchmark".equals(args[0])) {
+            net.talaatharb.harness.benchmark.BenchmarkMain.main(java.util.Arrays.copyOfRange(args, 1, args.length));
+        } else {
+            HarnessApp.main(args);
+        }
     }
 }

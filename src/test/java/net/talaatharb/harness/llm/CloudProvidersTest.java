@@ -18,6 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.sun.net.httpserver.Headers;
@@ -167,6 +169,85 @@ class CloudProvidersTest {
                 new ModelRequest("m", List.of(ChatMessage.user("hi")), true), tokens::add);
         assertEquals("Hi!", reply.content());
         assertEquals(List.of("Hi", "!"), tokens);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = { false, true })
+    void samplingOptionsReachOpenAiAndOllamaWithDefaultsOmitted(boolean stream) throws Exception {
+        responses.put("/v1/chat/completions", stream
+                ? "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n"
+                : "{\"choices\":[{\"message\":{\"content\":\"ok\"}}]}");
+        responses.put("/api/chat",
+                "{\"model\":\"m\",\"created_at\":\"2026-01-01T00:00:00Z\","
+                + "\"message\":{\"role\":\"assistant\",\"content\":\"ok\"},\"done\":true}\n");
+        for (ModelProvider provider : List.of(new OpenAiModelProvider(), new OllamaModelProvider())) {
+            ModelSettings c = config(provider.id(), provider.id().equals("openai") ? "/v1" : "");
+            ModelRequest request = new ModelRequest("m", List.of(ChatMessage.user("hi")), stream);
+            assertEquals("ok", provider.chat(c, request, null).content());
+            JsonNode defaults = bodies.get(bodies.size() - 1);
+            JsonNode defaultOptions = provider.id().equals("ollama") ? defaults.path("options") : defaults;
+            assertFalse(defaultOptions.has("temperature"), defaults.toString());
+            assertFalse(defaultOptions.has("seed"), defaults.toString());
+
+            c.temperature = 0.25;
+            c.seed = 123456L;
+            assertEquals("ok", provider.chat(c, request, null).content());
+            JsonNode sent = bodies.get(bodies.size() - 1);
+            JsonNode options = provider.id().equals("ollama") ? sent.path("options") : sent;
+            assertEquals(0.25, options.path("temperature").asDouble(), sent.toString());
+            assertEquals(123456, options.path("seed").asInt(), sent.toString());
+            if (provider.id().equals("ollama")) {
+                assertEquals(2, options.size(), "No other library defaults should be injected");
+            }
+
+            c.temperature = null;
+            c.seed = 0L;
+            provider.chat(c, request, null);
+            JsonNode seedOnly = bodies.get(bodies.size() - 1);
+            seedOnly = provider.id().equals("ollama") ? seedOnly.path("options") : seedOnly;
+            assertFalse(seedOnly.has("temperature"));
+            assertEquals(0, seedOnly.path("seed").asInt(-1));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = { false, true })
+    void anthropicTemperatureIsOptionalAndSeedIsRejectedBeforeNetwork(boolean stream) throws Exception {
+        responses.put("/v1/messages", stream
+                ? "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"ok\"}}\n\n"
+                : "{\"content\":[{\"type\":\"text\",\"text\":\"ok\"}]}");
+        ModelSettings c = config("anthropic", "");
+        ModelRequest request = new ModelRequest("m", List.of(ChatMessage.user("hi")), stream);
+        AnthropicModelProvider provider = new AnthropicModelProvider();
+        assertEquals("ok", provider.chat(c, request, null).content());
+        assertFalse(bodies.get(0).has("temperature"));
+        assertFalse(bodies.get(0).has("seed"));
+        c.temperature = 0.5;
+        assertEquals("ok", provider.chat(c, request, null).content());
+        assertEquals(0.5, bodies.get(1).path("temperature").asDouble());
+        assertFalse(bodies.get(1).has("seed"));
+        c.seed = 42L;
+        assertTrue(assertThrows(ModelProviderException.class, () -> provider.chat(c, request, null))
+                .getMessage().contains("does not support seed"));
+        assertEquals(2, bodies.size());
+    }
+
+    @Test
+    void openAiLargeSeedsAreNotTruncatedAndUnsupportedOptionsFailExplicitly() throws Exception {
+        responses.put("/v1/chat/completions", "{\"choices\":[{\"message\":{\"content\":\"ok\"}}]}");
+        ModelSettings c = config("openai", "/v1");
+        c.seed = Long.MAX_VALUE;
+        c.temperature = 0.0;
+        ModelRequest request = new ModelRequest("m", List.of(ChatMessage.user("hi")), false);
+        new OpenAiModelProvider().chat(c, request, null);
+        assertEquals(Long.MAX_VALUE, bodies.get(0).path("seed").asLong());
+        assertEquals(0.0, bodies.get(0).path("temperature").asDouble());
+        statuses.put("/v1/chat/completions", 400);
+        responses.put("/v1/chat/completions", "{\"error\":{\"message\":\"Unsupported parameter: temperature\"}}");
+        ModelProviderException error = assertThrows(ModelProviderException.class,
+                () -> new OpenAiModelProvider().chat(c, request, null));
+        assertTrue(error.getMessage().contains("Unsupported parameter: temperature"));
+        assertEquals(2, bodies.size(), "Do not silently retry with requested options removed");
     }
 
     @Test

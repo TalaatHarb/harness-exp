@@ -37,6 +37,9 @@ public class ModelSectionController implements SettingsSection {
     @FXML private Spinner<Integer> timeoutSpinner;
     @FXML private CheckBox streamingCheck;
     @FXML private Spinner<Integer> maxTokensSpinner;
+    @FXML private TextField temperatureField;
+    @FXML private TextField seedField;
+    @FXML private Label samplingLabel;
     @FXML private Button localButton;
     @FXML private Button cloudButton;
     @FXML private Button defaultUrlButton;
@@ -64,6 +67,11 @@ public class ModelSectionController implements SettingsSection {
         }
         defaultUrlButton.setVisible(!ollama);
         defaultUrlButton.setManaged(!ollama);
+        samplingLabel.setText("anthropic".equals(newId)
+                ? "Temperature: 0–1. Anthropic does not support seed; leave seed blank."
+                : "openai".equals(newId)
+                ? "Temperature: 0–2. Seed: signed 64-bit integer. Model/endpoint support varies."
+                : "Temperature: ≥0. Seed: signed 32-bit integer. Seed reproducibility is best effort.");
         if (provider == null) {
             return;
         }
@@ -96,11 +104,21 @@ public class ModelSectionController implements SettingsSection {
         SettingsSection.intSpinner(timeoutSpinner, 5, 3600, (int) s.model.requestTimeoutSeconds);
         streamingCheck.setSelected(s.model.streaming);
         SettingsSection.intSpinner(maxTokensSpinner, 1, 1_000_000, s.model.maxOutputTokens);
+        temperatureField.setText(s.model.temperature == null ? "" : s.model.temperature.toString());
+        seedField.setText(s.model.seed == null ? "" : s.model.seed.toString());
         onProviderChanged(null, s.model.provider);
     }
 
     @Override
     public void apply(HarnessSettings s) {
+        ModelSettings sampling = new ModelSettings();
+        sampling.temperature = ModelSettings.parseTemperature(temperatureField.getText());
+        sampling.seed = ModelSettings.parseSeed(seedField.getText());
+        try {
+            sampling.validateSampling(providerCombo.getValue());
+        } catch (net.talaatharb.harness.llm.ModelProviderException e) {
+            throw new IllegalArgumentException(e.getMessage(), e);
+        }
         s.model.provider = providerCombo.getValue();
         s.model.baseUrl = baseUrlField.getText().trim();
         s.model.apiKey = apiKeyField.getText();
@@ -109,6 +127,8 @@ public class ModelSectionController implements SettingsSection {
         s.model.requestTimeoutSeconds = SettingsSection.spinnerValue(timeoutSpinner);
         s.model.streaming = streamingCheck.isSelected();
         s.model.maxOutputTokens = SettingsSection.spinnerValue(maxTokensSpinner);
+        s.model.temperature = sampling.temperature;
+        s.model.seed = sampling.seed;
     }
 
     @FXML
@@ -129,7 +149,12 @@ public class ModelSectionController implements SettingsSection {
     @FXML
     private void onTest() {
         HarnessSettings probe = new HarnessSettings();
-        apply(probe);
+        try {
+            apply(probe);
+        } catch (IllegalArgumentException e) {
+            testLabel.setText(e.getMessage());
+            return;
+        }
         testLabel.setText("testing…");
         CompletableFuture.runAsync(() -> {
             try {

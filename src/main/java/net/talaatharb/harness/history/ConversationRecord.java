@@ -8,6 +8,7 @@ import java.util.UUID;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import net.talaatharb.harness.llm.ChatMessage;
+import net.talaatharb.harness.guardrails.SecretRedactionGuardrail;
 
 /** A persisted conversation: the full transcript the agent sees plus the per-turn outcomes the UI renders. */
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -34,7 +35,7 @@ public class ConversationRecord {
 
     /** First line of the first request, shortened. */
     public static String titleFor(String userText) {
-        String text = userText == null ? "" : userText.strip();
+        String text = userText == null ? "" : SecretRedactionGuardrail.redactTitle(userText).strip();
         int newline = text.indexOf('\n');
         if (newline >= 0) {
             text = text.substring(0, newline).strip();
@@ -47,7 +48,7 @@ public class ConversationRecord {
 
     /** Cleans a user-chosen title: single line, collapsed whitespace, capped length. */
     public static String normalizeTitle(String title) {
-        String text = title == null ? "" : title.replaceAll("\\s+", " ").strip();
+        String text = title == null ? "" : SecretRedactionGuardrail.redactTitle(title).replaceAll("\\s+", " ").strip();
         if (text.isEmpty()) {
             throw new IllegalArgumentException("Title must not be blank");
         }

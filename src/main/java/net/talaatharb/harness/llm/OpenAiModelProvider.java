@@ -77,9 +77,16 @@ public class OpenAiModelProvider implements ModelProvider {
     public ModelReply chat(ModelSettings config, ModelRequest request, Consumer<String> tokenSink)
             throws ModelProviderException {
         long start = System.currentTimeMillis();
+        config.validateSampling(ID);
         ObjectNode body = HttpJson.MAPPER.createObjectNode();
         body.put("model", request.model());
         body.set("messages", messages(request.messages()));
+        if (config.temperature != null) {
+            body.put("temperature", config.temperature);
+        }
+        if (config.seed != null) {
+            body.put("seed", config.seed);
+        }
         String url = HttpJson.url(config, DEFAULT_URL, "/chat/completions");
         if (!request.stream()) {
             JsonNode res = HttpJson.post(url, headers(config), body, config, "OpenAI");

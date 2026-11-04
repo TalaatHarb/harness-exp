@@ -5,6 +5,9 @@ import net.talaatharb.harness.tools.ToolResult;
 
 /** UI-facing callbacks; invoked on the agent thread. */
 public interface AgentListener {
+    /** Sanitized messages actually sent to the provider, for opt-in context inspection. */
+    default void onContext(java.util.List<net.talaatharb.harness.llm.ChatMessage> messages) {
+    }
 
     default void onToken(String token) {
     }

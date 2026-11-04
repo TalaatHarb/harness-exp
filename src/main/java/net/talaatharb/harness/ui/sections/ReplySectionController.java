@@ -6,6 +6,8 @@ import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
+import javafx.scene.control.Spinner;
 import javafx.scene.layout.VBox;
 import net.talaatharb.harness.config.HarnessSettings;
 import net.talaatharb.harness.reply.DynamicUiRenderer;
@@ -24,6 +26,11 @@ public class ReplySectionController implements SettingsSection {
     @FXML private ComboBox<ReplySettings.Mode> modeCombo;
     @FXML private CheckBox traceCheck;
     @FXML private CheckBox thinkingCheck;
+    @FXML private CheckBox contextCheck;
+    @FXML private Spinner<Integer> listSpinner;
+    @FXML private Spinner<Integer> bulletsSpinner;
+    @FXML private Spinner<Integer> repairSpinner;
+    @FXML private TextField allowedField;
     @FXML private TextArea specArea;
     @FXML private VBox previewBox;
 
@@ -38,6 +45,11 @@ public class ReplySectionController implements SettingsSection {
         modeCombo.setValue(s.reply.mode);
         traceCheck.setSelected(s.reply.showToolTrace);
         thinkingCheck.setSelected(s.reply.showThinking);
+        contextCheck.setSelected(s.reply.showContext);
+        SettingsSection.intSpinner(listSpinner, 0, 100, s.reply.exactListItems);
+        SettingsSection.intSpinner(bulletsSpinner, 0, 100, s.reply.maxBulletPoints);
+        SettingsSection.intSpinner(repairSpinner, 0, 3, s.reply.maxRepairAttempts);
+        allowedField.setText(s.reply.allowedReplies);
     }
 
     @Override
@@ -45,6 +57,11 @@ public class ReplySectionController implements SettingsSection {
         s.reply.mode = modeCombo.getValue();
         s.reply.showToolTrace = traceCheck.isSelected();
         s.reply.showThinking = thinkingCheck.isSelected();
+        s.reply.showContext = contextCheck.isSelected();
+        s.reply.exactListItems = SettingsSection.spinnerValue(listSpinner);
+        s.reply.maxBulletPoints = SettingsSection.spinnerValue(bulletsSpinner);
+        s.reply.maxRepairAttempts = SettingsSection.spinnerValue(repairSpinner);
+        s.reply.allowedReplies = allowedField.getText();
     }
 
     @FXML

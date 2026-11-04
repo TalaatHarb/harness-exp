@@ -34,6 +34,10 @@ public class AgentRunContext {
     private ToolResult lastToolResult;
     private Throwable lastError;
     private volatile String abortReason;
+    private final StringBuffer streamedReply = new StringBuffer();
+    private final java.util.Set<String> deniedTools = new java.util.HashSet<>();
+    private final java.util.Set<String> attemptedTools = new java.util.HashSet<>();
+    private final java.util.Set<String> successfulTools = new java.util.HashSet<>();
 
     AgentRunContext(String userMessage, List<Attachment> attachments, HarnessSettings settings,
             AtomicBoolean cancelled) {
@@ -113,12 +117,41 @@ public class AgentRunContext {
         return cancelled.get();
     }
 
+    void resetStream() {
+        streamedReply.setLength(0);
+    }
+
+    void appendStream(String token) {
+        if (token != null) streamedReply.append(token);
+    }
+
+    String partialReply() {
+        return streamedReply.toString();
+    }
+
+    boolean wasDenied(String tool) {
+        return deniedTools.contains(tool);
+    }
+
+    void deny(String tool) {
+        deniedTools.add(tool);
+    }
+
+    boolean attempted(String tool) {
+        return attemptedTools.contains(tool);
+    }
+
+    boolean succeeded(String tool) {
+        return successfulTools.contains(tool);
+    }
+
     void nextIteration() {
         iteration++;
     }
 
     int recordToolCall(ToolCall call) {
         toolCalls++;
+        attemptedTools.add(call.name());
         lastToolCall = call;
         return toolCallCounts.merge(call.signature(), 1, Integer::sum);
     }
@@ -133,6 +166,7 @@ public class AgentRunContext {
 
     void setLastToolResult(ToolResult result) {
         lastToolResult = result;
+        if (result.success() && lastToolCall != null) successfulTools.add(lastToolCall.name());
     }
 
     int recordError(Throwable error) {

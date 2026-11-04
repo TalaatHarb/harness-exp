@@ -13,13 +13,15 @@ public class MemorySettings {
     }
 
     public Backend backend = Backend.MARKDOWN;
+    /** Route unambiguous single-sentence "Remember that ..." requests through the approved tool verbatim. */
+    public boolean directRememberRequests = true;
     /** Most memories the context builder injects for one message (only those relevant to it). */
     public int maxContextMemories = 5;
     /** Most results returned by one {@code recall} call. */
     public int maxRecallResults = 10;
     /**
-     * How much of a new memory must already be covered by an existing one (word overlap, %) for {@code remember} to
-     * treat it as a duplicate instead of adding it.
+     * Legacy setting retained for settings-file compatibility. Word-overlap deduplication is no longer used:
+     * distinct facts can differ by only one name, number or negation.
      */
     public int duplicateThresholdPercent = 80;
 }

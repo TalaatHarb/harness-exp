@@ -76,13 +76,11 @@ public class AppModule extends AbstractModule {
     protected void configure() {
         bind(Path.class).annotatedWith(Names.named(SettingsStore.SETTINGS_PATH)).toInstance(settingsPath);
 
-        Multibinder<ModelProvider> providers = Multibinder.newSetBinder(binder(), ModelProvider.class);
-        providers.addBinding().to(OllamaModelProvider.class);
-        providers.addBinding().to(OpenAiModelProvider.class);
-        providers.addBinding().to(AnthropicModelProvider.class);
+        bindModelProviders();
 
         Multibinder<Tool> tools = Multibinder.newSetBinder(binder(), Tool.class);
         tools.addBinding().to(CurrentTimeTool.class);
+        tools.addBinding().to(net.talaatharb.harness.tools.builtin.CalculateTool.class);
         tools.addBinding().to(ReadFileTool.class);
         tools.addBinding().to(CreateToolTool.class);
         tools.addBinding().to(CreateSkillTool.class);
@@ -169,6 +167,13 @@ public class AppModule extends AbstractModule {
     }
 
     /** Overridable so headless tests can auto-approve. */
+    protected void bindModelProviders() {
+        Multibinder<ModelProvider> providers = Multibinder.newSetBinder(binder(), ModelProvider.class);
+        providers.addBinding().to(OllamaModelProvider.class);
+        providers.addBinding().to(OpenAiModelProvider.class);
+        providers.addBinding().to(AnthropicModelProvider.class);
+    }
+
     protected void bindApprovalGateway() {
         bind(ApprovalGateway.class).to(DialogApprovalGateway.class);
     }

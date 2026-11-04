@@ -16,4 +16,10 @@ public class ReplySettings {
     public boolean showToolTrace = true;
     /** Show the model's thinking text (for reasoning models) when available. */
     public boolean showThinking = false;
+    public boolean showContext = false;
+    /** Optional explicit response contract; zero/blank disables a constraint. */
+    public int exactListItems = 0;
+    public int maxBulletPoints = 0;
+    public String allowedReplies = "";
+    public int maxRepairAttempts = 1;
 }

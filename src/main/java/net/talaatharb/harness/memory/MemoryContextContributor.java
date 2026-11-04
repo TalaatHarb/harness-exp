@@ -51,6 +51,8 @@ public class MemoryContextContributor implements ContextContributor {
                     : a.settings().memory.backend).list(), message, max).stream().filter(m -> m.score() > 0).toList();
         } catch (RuntimeException e) {
             LOG.error("Could not read memories for the context", e);
+            a.addSystemSection("## Memory\nMemory retrieval failed. Saved memories could not be read; "
+                    + "do not infer that no memories exist or claim to have recalled them.");
             return;
         }
         if (matches.isEmpty()) {

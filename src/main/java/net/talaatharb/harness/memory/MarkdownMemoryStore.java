@@ -17,8 +17,6 @@ import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Pattern;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -41,7 +39,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  */
 public class MarkdownMemoryStore implements MemoryStore {
     public static final String EXTENSION = ".md";
-    private static final Logger LOG = LoggerFactory.getLogger(MarkdownMemoryStore.class);
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String FENCE = "---";
     private static final Pattern VALID_ID = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,119}");
@@ -76,7 +73,7 @@ public class MarkdownMemoryStore implements MemoryStore {
     @Override
     public synchronized List<MemoryEntry> list() {
         List<MemoryEntry> result = new ArrayList<>();
-        if (!Files.isDirectory(dir)) {
+        if (Files.notExists(dir)) {
             return result;
         }
         try (DirectoryStream<Path> files = Files.newDirectoryStream(dir, "*" + EXTENSION)) {
@@ -89,11 +86,11 @@ public class MarkdownMemoryStore implements MemoryStore {
                 try {
                     result.add(read(file, id));
                 } catch (IOException | RuntimeException e) {
-                    LOG.warn("Skipping unreadable memory file {}", file, e);
+                    throw new IllegalStateException("Could not read memory file " + file, e);
                 }
             }
         } catch (IOException e) {
-            LOG.error("Could not list memory folder {}", dir, e);
+            throw new UncheckedIOException("Could not list memory folder " + dir, e);
         }
         result.sort(MemoryService.NEWEST_FIRST);
         return result;

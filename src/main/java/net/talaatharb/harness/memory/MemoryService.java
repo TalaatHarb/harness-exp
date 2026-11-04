@@ -23,7 +23,7 @@ import net.talaatharb.harness.config.SettingsStore;
 
 /**
  * Long-term memory on top of the configured backend (markdown folder or MapDB file). {@link #remember} avoids
- * near-duplicates; {@link #recall} ranks memories by word overlap with the query (rare words count more).
+ * exact duplicates; {@link #recall} ranks memories by conservatively normalized query terms.
  */
 @Singleton
 public class MemoryService implements AutoCloseable {
@@ -92,21 +92,14 @@ public class MemoryService implements AutoCloseable {
      * Adds a memory unless an existing one already says the same thing.
      * <ul>
      * <li>{@code replaceId} given: that memory's text is replaced (tags merged).</li>
-     * <li>An existing memory covers the new text: nothing is added (new tags are merged in) → DUPLICATE.</li>
-     * <li>The new text covers an existing memory (it restates and extends it): that memory is updated → UPDATED.</li>
+     * <li>An existing memory has the same case/whitespace-normalized text: tags are merged → DUPLICATE.</li>
+     * <li>Only explicit {@code replaceId} updates replace text; overlap is not evidence of equivalent facts.</li>
      * <li>Otherwise a new memory is added → ADDED.</li>
      * </ul>
      */
     public RememberResult remember(MemoryStore store, String text, List<String> tags, String replaceId, String source)
             throws IOException {
-        String clean = text == null ? "" : text.strip();
-        if (clean.isEmpty()) {
-            throw new IllegalArgumentException("The memory text is empty");
-        }
-        if (clean.length() > MAX_MEMORY_CHARS) {
-            throw new IllegalArgumentException("The memory is too long (" + clean.length() + " > " + MAX_MEMORY_CHARS
-                    + " characters); store one short, self-contained fact per memory");
-        }
+        String clean = validateText(text);
         List<String> newTags = MemoryEntry.cleanTags(tags);
         if (replaceId != null && !replaceId.isBlank()) {
             MemoryEntry old = store.get(replaceId.strip()).orElseThrow(() -> new IllegalArgumentException(
@@ -117,51 +110,38 @@ public class MemoryService implements AutoCloseable {
             updated.source = source;
             return new RememberResult(Outcome.UPDATED, store.save(updated), old);
         }
-        double threshold = Math.max(0.3, Math.min(1.0, settings().duplicateThresholdPercent / 100.0));
-        Set<String> newTerms = terms(clean);
-        MemoryEntry covering = null;
-        MemoryEntry covered = null;
-        double bestCovering = 0;
-        double bestCovered = 0;
         for (MemoryEntry e : store.list()) {
-            if (normalize(e.text).equals(normalize(clean))) {
-                covering = e;
-                bestCovering = 2;
-                break;
-            }
-            Set<String> oldTerms = terms(e.text);
-            if (newTerms.isEmpty() || oldTerms.isEmpty()) {
+            if (!duplicateKey(e.text).equals(duplicateKey(clean))) {
                 continue;
             }
-            double newInOld = containment(newTerms, oldTerms);
-            double oldInNew = containment(oldTerms, newTerms);
-            if (newInOld >= threshold && newInOld > bestCovering) {
-                covering = e;
-                bestCovering = newInOld;
-            } else if (oldInNew >= threshold && oldInNew > bestCovered) {
-                covered = e;
-                bestCovered = oldInNew;
-            }
-        }
-        if (covering != null) {
-            List<String> merged = merge(covering.tags, newTags);
-            if (merged.size() != covering.tags.size()) {
-                MemoryEntry withTags = covering.copy();
+            List<String> merged = merge(e.tags, newTags);
+            if (!merged.equals(e.tags)) {
+                MemoryEntry withTags = e.copy();
                 withTags.tags = merged;
-                return new RememberResult(Outcome.DUPLICATE, store.save(withTags), covering);
+                return new RememberResult(Outcome.DUPLICATE, store.save(withTags), e);
             }
-            return new RememberResult(Outcome.DUPLICATE, covering, covering);
-        }
-        if (covered != null) {
-            MemoryEntry updated = covered.copy();
-            updated.text = clean;
-            updated.tags = merge(covered.tags, newTags);
-            updated.source = source;
-            return new RememberResult(Outcome.UPDATED, store.save(updated), covered);
+            return new RememberResult(Outcome.DUPLICATE, e, e);
         }
         MemoryEntry saved = store.save(new MemoryEntry(clean, newTags, source));
         LOG.info("Remembered {} in {}", saved.id, store.location());
         return new RememberResult(Outcome.ADDED, saved, null);
+    }
+
+    public static String validateText(String text) {
+        String clean = text == null ? "" : text.strip();
+        if (clean.isEmpty()) {
+            throw new IllegalArgumentException("The memory text is empty");
+        }
+        if (clean.length() > MAX_MEMORY_CHARS) {
+            throw new IllegalArgumentException("The memory is too long (" + clean.length() + " > " + MAX_MEMORY_CHARS
+                    + " characters); store one short, self-contained fact per memory");
+        }
+        return clean;
+    }
+
+    private static String duplicateKey(String text) {
+        // Keep word order, negation, numbers and internal punctuation (C++ is not C).
+        return text == null ? "" : text.strip().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
     }
 
     public List<Match> recall(String query, int limit) {
@@ -175,14 +155,18 @@ public class MemoryService implements AutoCloseable {
      */
     public static List<Match> rank(List<MemoryEntry> all, String query, int limit) {
         int max = Math.max(1, limit);
-        Set<String> queryTerms = terms(query);
-        if (queryTerms.isEmpty()) {
+        Set<String> queryTerms = retrievalTerms(query);
+        if (query == null || query.isBlank()) {
             return all.stream().sorted(NEWEST_FIRST).limit(max).map(e -> new Match(e, 0)).toList();
+        }
+        if (queryTerms.isEmpty()) {
+            return List.of();
         }
         Map<MemoryEntry, Set<String>> termsOf = new HashMap<>();
         Map<String, Integer> df = new HashMap<>();
         for (MemoryEntry e : all) {
-            Set<String> t = terms(e.text + " " + String.join(" ", e.tags));
+            Set<String> t = retrievalTerms(e.text);
+            t.addAll(retrievalTerms(String.join(" ", e.tags)));
             termsOf.put(e, t);
             t.forEach(term -> df.merge(term, 1, Integer::sum));
         }
@@ -199,6 +183,9 @@ public class MemoryService implements AutoCloseable {
         List<Match> matches = new ArrayList<>();
         for (MemoryEntry e : all) {
             Set<String> t = termsOf.get(e);
+            if (queryTerms.contains("unit") && !t.contains("unit")) {
+                continue;
+            }
             double covered = 0;
             for (String q : queryTerms) {
                 if (t.contains(q)) {
@@ -209,7 +196,7 @@ public class MemoryService implements AutoCloseable {
                 continue;
             }
             double score = total > 0 ? covered / total : 0;
-            Set<String> tagTerms = terms(String.join(" ", e.tags));
+            Set<String> tagTerms = retrievalTerms(String.join(" ", e.tags));
             score += 0.25 * queryTerms.stream().filter(tagTerms::contains).count();
             if (phrase.length() > 3 && normalize(e.text).contains(phrase)) {
                 score += 0.5;
@@ -227,6 +214,7 @@ public class MemoryService implements AutoCloseable {
         if (text == null) {
             return terms;
         }
+
         for (String word : text.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}]+")) {
             if (word.isEmpty() || STOP_WORDS.contains(word)) {
                 continue;
@@ -234,6 +222,19 @@ public class MemoryService implements AutoCloseable {
             terms.add(stem(word));
         }
         return terms;
+    }
+
+    private static Set<String> retrievalTerms(String text) {
+        String normalized = text == null ? "" : text.toLowerCase(Locale.ROOT);
+        normalized = normalized.replaceAll("\\bmeasurement\\s+(system|units?)\\b", "unit")
+                .replaceAll("\\b(metric|imperial|si)\\s+system\\b", "$1 unit");
+        if (normalized.matches("(?s).*\\bprefer(?:s|red|ring|ence|ences)?\\s+(?:the\\s+)?(?:metric|imperial)"
+                + "(?:\\s+(?:units?|system)\\b.*|\\s*[,.;!?].*|\\s*)")) {
+            normalized += " unit";
+        }
+        Set<String> result = terms(normalized);
+        result.removeAll(Set.of("user", "prefer", "prefers", "preferred", "preference", "tell", "please"));
+        return result;
     }
 
     private static String stem(String w) {
@@ -244,14 +245,6 @@ public class MemoryService implements AutoCloseable {
             return w.substring(0, w.length() - 1);
         }
         return w;
-    }
-
-    /** Share of {@code a} found in {@code b}. */
-    static double containment(Set<String> a, Set<String> b) {
-        if (a.isEmpty()) {
-            return 0;
-        }
-        return a.stream().filter(b::contains).count() / (double) a.size();
     }
 
     private static String normalize(String text) {

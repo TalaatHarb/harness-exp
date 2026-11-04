@@ -38,6 +38,9 @@
                 <tooltip><Tooltip text="Documents (RAG) for this conversation: add large files, folders or text to search"/></tooltip>
             </Button>
             <Button text="New chat" onAction="#onNewChat"/>
+            <Button text="Benchmarks" onAction="#onBenchmarks">
+                <tooltip><Tooltip text="View saved benchmark runs, responses and assessments"/></tooltip>
+            </Button>
             <Button text="⚙ Harness" onAction="#onOpenSettings">
                 <tooltip><Tooltip text="System prompt, skills, context, tools, loop limits, guardrails, approval, reply, speech"/></tooltip>
             </Button>

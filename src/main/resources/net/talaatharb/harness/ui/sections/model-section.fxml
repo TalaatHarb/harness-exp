@@ -41,7 +41,17 @@
         <Spinner fx:id="maxTokensSpinner" prefWidth="120" GridPane.rowIndex="6" GridPane.columnIndex="1">
             <tooltip><Tooltip text="Reply length cap sent to Anthropic (required there; ignored by the other providers)"/></tooltip>
         </Spinner>
+        <Label text="Temperature (optional)" GridPane.rowIndex="7"/>
+        <TextField fx:id="temperatureField" promptText="blank = provider default" prefWidth="200"
+                   GridPane.rowIndex="7" GridPane.columnIndex="1"/>
+        <Label text="Seed (optional)" GridPane.rowIndex="8"/>
+        <TextField fx:id="seedField" promptText="blank = provider default" prefWidth="200"
+                   GridPane.rowIndex="8" GridPane.columnIndex="1"/>
+        <Label fx:id="samplingLabel" wrapText="true" styleClass="section-help"
+               GridPane.rowIndex="9" GridPane.columnSpan="2"/>
     </GridPane>
+    <Label wrapText="true" styleClass="section-help"
+           text="Blank temperature and seed preserve provider defaults. Configured values are sent on both streamed and non-streamed chats. Seeds do not guarantee identical replies."/>
     <HBox spacing="8" alignment="CENTER_LEFT">
         <Button text="Test connection &amp; list models" onAction="#onTest"/>
         <Label fx:id="testLabel" wrapText="true"/>

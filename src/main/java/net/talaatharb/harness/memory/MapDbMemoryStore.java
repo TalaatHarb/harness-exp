@@ -12,8 +12,6 @@ import org.mapdb.DB;
 import org.mapdb.DBMaker;
 import org.mapdb.HTreeMap;
 import org.mapdb.Serializer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -21,17 +19,14 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 /**
  * Memories as JSON strings in a transactional MapDB file. Opened on first use; if the file can't be opened (e.g.
- * another instance holds the lock) it falls back to an in-memory DB so the app keeps working.
+ * another instance holds the lock) operations fail explicitly rather than claiming volatile data was saved.
  */
 public class MapDbMemoryStore implements MemoryStore {
-    private static final Logger LOG = LoggerFactory.getLogger(MapDbMemoryStore.class);
-
     private final ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     private final Path path;
     private DB db;
     private HTreeMap<String, String> memories;
-    private boolean persistent;
 
     public MapDbMemoryStore(Path path) {
         this.path = path.toAbsolutePath().normalize();
@@ -39,7 +34,7 @@ public class MapDbMemoryStore implements MemoryStore {
 
     @Override
     public String location() {
-        return path + (db != null && !persistent ? " (could not open: in-memory only)" : "");
+        return path.toString();
     }
 
     private HTreeMap<String, String> map() {
@@ -50,15 +45,21 @@ public class MapDbMemoryStore implements MemoryStore {
                     Files.createDirectories(parent);
                 }
                 db = DBMaker.fileDB(path.toFile()).transactionEnable().closeOnJvmShutdown().make();
-                persistent = true;
+                memories = db.hashMap("memories", Serializer.STRING, Serializer.STRING).createOrOpen();
+                // Commit initialization so the WAL does not keep the file locked after close on Windows.
+                db.commit();
             } catch (IOException | RuntimeException e) {
-                LOG.error("Could not open memory DB at {}; memories will not be kept after exit", path, e);
-                db = DBMaker.memoryDB().make();
-                persistent = false;
+                if (db != null && !db.isClosed()) {
+                    try {
+                        db.close();
+                    } catch (RuntimeException closeError) {
+                        e.addSuppressed(closeError);
+                    }
+                }
+                db = null;
+                memories = null;
+                throw new IllegalStateException("Could not open persistent memory DB at " + path, e);
             }
-            memories = db.hashMap("memories", Serializer.STRING, Serializer.STRING).createOrOpen();
-            // without a commit the write-ahead log stays open after close() and keeps the file locked on Windows
-            db.commit();
         }
         return memories;
     }
@@ -72,7 +73,7 @@ public class MapDbMemoryStore implements MemoryStore {
                 e.id = entry.getKey();
                 result.add(e);
             } catch (IOException | RuntimeException e) {
-                LOG.warn("Skipping unreadable memory {}", entry.getKey(), e);
+                throw new IllegalStateException("Could not read memory " + entry.getKey(), e);
             }
         }
         result.sort(MemoryService.NEWEST_FIRST);
@@ -90,8 +91,7 @@ public class MapDbMemoryStore implements MemoryStore {
             e.id = id;
             return Optional.of(e);
         } catch (IOException e) {
-            LOG.warn("Memory {} is unreadable", id, e);
-            return Optional.empty();
+            throw new IllegalStateException("Memory " + id + " is unreadable", e);
         }
     }
 

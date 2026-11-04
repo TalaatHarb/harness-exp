@@ -1,0 +1,108 @@
+{
+  "format" : "harness-exp/settings",
+  "version" : 1,
+  "exportedAt" : "2026-11-03T13:21:26.459785300+02:00",
+  "settings" : {
+    "model" : {
+      "provider" : "ollama",
+      "baseUrl" : "http://localhost:11434",
+      "apiKey" : "",
+      "model" : "qwen2.5:3b",
+      "requestTimeoutSeconds" : 180,
+      "streaming" : true,
+      "maxOutputTokens" : 4096
+    },
+    "systemPrompt" : {
+      "template" : "You are a helpful assistant running inside an experimental agent harness.\nToday is {{date}} and the local time is {{time}}. You are served by model {{model}}.\nBe concise and accurate. If you are unsure, say so."
+    },
+    "context" : {
+      "maxHistoryMessages" : 20,
+      "pinnedContext" : "",
+      "disabledContributors" : [ ],
+      "maxAttachments" : 8,
+      "maxAttachmentMb" : 20,
+      "maxAttachmentTextChars" : 60000
+    },
+    "tools" : {
+      "toolsEnabled" : true,
+      "disabledTools" : [ ],
+      "mcpServers" : [ ],
+      "maxToolOutputChars" : 8000,
+      "mcpConnectTimeoutSeconds" : 180,
+      "mcpToolTimeoutSeconds" : 120
+    },
+    "agentLoop" : {
+      "maxIterations" : 8,
+      "maxToolCalls" : 10,
+      "maxDurationSeconds" : 600,
+      "maxIdenticalToolCalls" : 2,
+      "maxConsecutiveErrors" : 2
+    },
+    "guardrails" : {
+      "enabled" : true,
+      "disabledGuardrails" : [ ],
+      "maxInputChars" : 8000,
+      "blockedTerms" : [ ]
+    },
+    "approval" : {
+      "policy" : "RISKY_TOOLS",
+      "alwaysAllowedTools" : [ ],
+      "timeoutSeconds" : 300
+    },
+    "reply" : {
+      "mode" : "TEXT",
+      "showToolTrace" : true,
+      "showThinking" : true
+    },
+    "storage" : {
+      "skillsDir" : "",
+      "dynamicToolsDir" : "",
+      "historyDb" : "",
+      "modelsDir" : "",
+      "memoryDir" : "",
+      "memoryDb" : "",
+      "ragIndex" : ""
+    },
+    "speech" : {
+      "dictationEnabled" : true,
+      "sendAfterDictation" : false,
+      "transcribeAudioAttachments" : true,
+      "language" : "auto",
+      "maxRecordingSeconds" : 120
+    },
+    "memory" : {
+      "backend" : "MARKDOWN",
+      "maxContextMemories" : 5,
+      "maxRecallResults" : 10,
+      "duplicateThresholdPercent" : 80
+    },
+    "rag" : {
+      "autoContext" : true,
+      "embedder" : "OLLAMA",
+      "embeddingModel" : "nomic-embed-text",
+      "embeddingBaseUrl" : "",
+      "chunkSize" : 1200,
+      "chunkOverlap" : 200,
+      "contextResults" : 4,
+      "maxSearchResults" : 8,
+      "minScorePercent" : 25,
+      "maxContextChars" : 6000,
+      "maxFileMb" : 50
+    }
+  },
+  "skills" : [ {
+    "name" : "Code reviewer",
+    "description" : "Reviews code snippets",
+    "instructions" : "When reviewing code, list concrete bugs first, then risks, then style. Quote the relevant lines.",
+    "triggers" : [ "review", "code" ],
+    "enabled" : true
+  }, {
+    "name" : "Summarizer",
+    "description" : "Produces short summaries",
+    "instructions" : "When asked to summarize, answer with at most 5 bullet points.",
+    "triggers" : [ "summarize", "summary", "tl;dr" ],
+    "enabled" : true
+  } ],
+  "dynamicTools" : [ ],
+  "memories" : [ ]
+}

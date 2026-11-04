@@ -16,6 +16,7 @@ import io.github.ollama4j.models.chat.OllamaChatRequest;
 import io.github.ollama4j.models.chat.OllamaChatResult;
 import io.github.ollama4j.models.chat.OllamaChatStreamObserver;
 import io.github.ollama4j.models.response.Model;
+import io.github.ollama4j.utils.OptionsBuilder;
 
 /**
  * Ollama-backed provider. Works with a local daemon or with Ollama cloud when
@@ -80,6 +81,7 @@ public class OllamaModelProvider implements ModelProvider {
     public ModelReply chat(ModelSettings config, ModelRequest request, Consumer<String> tokenSink)
             throws ModelProviderException {
         long start = System.currentTimeMillis();
+        config.validateSampling(ID);
         List<OllamaChatMessage> messages = new ArrayList<>();
         for (ChatMessage m : request.messages()) {
             OllamaChatMessage message = new OllamaChatMessage(toOllamaRole(m.role()), m.contentForModel());
@@ -93,6 +95,16 @@ public class OllamaModelProvider implements ModelProvider {
                 .withModel(request.model())
                 .withMessages(messages)
                 .withUseTools(false);
+        if (config.temperature != null || config.seed != null) {
+            OptionsBuilder options = new OptionsBuilder();
+            if (config.temperature != null) {
+                options.setTemperature(config.temperature.floatValue());
+            }
+            if (config.seed != null) {
+                options.setSeed(Math.toIntExact(config.seed));
+            }
+            chatRequest.withOptions(options.build());
+        }
         StringBuilder streamed = new StringBuilder();
         OllamaChatStreamObserver observer = null;
         if (request.stream()) {

@@ -127,16 +127,19 @@ public class RagService implements AutoCloseable {
         }
         Progress p = progress == null ? Progress.NONE : progress;
         RagSettings rag = settings();
-        String title = blank(name) ? "Untitled" : name.strip();
-        List<String> pieces = TextChunker.chunk(text, rag.chunkSize, rag.chunkOverlap);
+        String title = net.talaatharb.harness.guardrails.SecretRedactionGuardrail.redact(
+                blank(name) ? "Untitled" : name.strip(), settings.get());
+        String safeText = net.talaatharb.harness.guardrails.SecretRedactionGuardrail.redact(text, settings.get());
+        List<String> pieces = TextChunker.chunk(safeText, rag.chunkSize, rag.chunkOverlap);
         Embedder embedder = embedder();
         List<RagStore.StoredChunk> chunks = embed(embedder, title, pieces, p);
         RagDocument doc = new RagDocument();
         doc.id = newId(conversationId, title);
         doc.conversationId = conversationId;
         doc.name = title;
-        doc.source = blank(source) ? "text" : source;
-        doc.chars = text.length();
+        doc.source = net.talaatharb.harness.guardrails.SecretRedactionGuardrail.redact(
+                blank(source) ? "text" : source, settings.get());
+        doc.chars = safeText.length();
         doc.chunks = chunks.size();
         doc.embedder = embedder.id();
         doc.dimensions = chunks.isEmpty() ? 0 : chunks.get(0).vector().length;
@@ -290,8 +293,10 @@ public class RagService implements AutoCloseable {
                 continue;
             }
             List<RagStore.StoredChunk> old = store.chunks(conversationId, doc.id);
-            List<RagStore.StoredChunk> fresh = embed(embedder, doc.name,
-                    old.stream().map(RagStore.StoredChunk::text).toList(), p);
+            List<RagStore.StoredChunk> fresh = embed(embedder,
+                    net.talaatharb.harness.guardrails.SecretRedactionGuardrail.redact(doc.name, settings.get()),
+                    old.stream().map(c -> net.talaatharb.harness.guardrails.SecretRedactionGuardrail.redact(
+                            c.text(), settings.get())).toList(), p);
             RagDocument updated = doc.copy();
             updated.embedder = embedder.id();
             updated.dimensions = fresh.isEmpty() ? 0 : fresh.get(0).vector().length;
@@ -323,7 +328,8 @@ public class RagService implements AutoCloseable {
         if (compatible.isEmpty()) {
             return new SearchResult(List.of(), docs.size(), other);
         }
-        float[] q = embedQuery(embedder, query.strip());
+        float[] q = embedQuery(embedder,
+                net.talaatharb.harness.guardrails.SecretRedactionGuardrail.redact(query.strip(), settings.get()));
         List<Hit> hits = new ArrayList<>();
         for (RagStore.ScoredChunk c : store.search(conversationId, embedder.id(), q, limit)) {
             RagDocument d = compatible.get(c.documentId());

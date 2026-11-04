@@ -23,6 +23,9 @@ import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import com.google.inject.name.Named;
 
+import net.talaatharb.harness.config.SettingsStore;
+import net.talaatharb.harness.guardrails.SecretRedactionGuardrail;
+
 /**
  * MapDB-backed conversation history. Records are stored as JSON strings (schema-tolerant across versions) in a
  * transactional file DB, with a separate summary index for the history list. If the file can't be opened (e.g.
@@ -39,9 +42,15 @@ public class ConversationStore implements AutoCloseable {
     private final HTreeMap<String, String> conversations;
     private final HTreeMap<String, String> index;
     private final boolean persistent;
+    private final SettingsStore settings;
+
+    public ConversationStore(@Named(DB_PATH) Path path) {
+        this(path, new SettingsStore(null));
+    }
 
     @Inject
-    public ConversationStore(@Named(DB_PATH) Path path) {
+    public ConversationStore(@Named(DB_PATH) Path path, SettingsStore settings) {
+        this.settings = settings;
         DB opened = open(path);
         persistent = opened != null;
         db = opened != null ? opened : DBMaker.memoryDB().make();
@@ -87,6 +96,7 @@ public class ConversationStore implements AutoCloseable {
         if (record.title == null || record.title.isBlank()) {
             record.title = record.turns.isEmpty() ? "Untitled" : ConversationRecord.titleFor(firstRequest(record));
         }
+        sanitize(record);
         try {
             conversations.put(record.id, mapper.writeValueAsString(record));
             index.put(record.id, mapper.writeValueAsString(
@@ -104,7 +114,16 @@ public class ConversationStore implements AutoCloseable {
             return Optional.empty();
         }
         try {
-            return Optional.of(mapper.readValue(json, ConversationRecord.class));
+            ConversationRecord record = mapper.readValue(json, ConversationRecord.class);
+            sanitize(record);
+            String safeJson = mapper.writeValueAsString(record);
+            if (!safeJson.equals(json)) {
+                conversations.put(id, safeJson);
+                index.put(id, mapper.writeValueAsString(
+                        new ConversationSummary(id, record.title, record.updatedAt, record.turns.size())));
+                db.commit();
+            }
+            return Optional.of(record);
         } catch (IOException e) {
             LOG.error("Conversation {} is unreadable", id, e);
             return Optional.empty();
@@ -116,7 +135,15 @@ public class ConversationStore implements AutoCloseable {
         List<ConversationSummary> result = new ArrayList<>();
         for (var entry : index.entrySet()) {
             try {
-                result.add(mapper.readValue(entry.getValue(), ConversationSummary.class));
+                ConversationSummary summary = mapper.readValue(entry.getValue(), ConversationSummary.class);
+                String safeJson = mapper.writeValueAsString(summary);
+                if (!safeJson.equals(entry.getValue())) {
+                    // Repair legacy index and transcript titles without changing recency.
+                    load(entry.getKey());
+                    index.put(entry.getKey(), safeJson);
+                    db.commit();
+                }
+                result.add(summary);
             } catch (IOException e) {
                 LOG.warn("Skipping unreadable history entry {}", entry.getKey(), e);
             }
@@ -124,6 +151,18 @@ public class ConversationStore implements AutoCloseable {
         result.sort(Comparator.comparing(ConversationSummary::updatedAt,
                 Comparator.nullsLast(Comparator.reverseOrder())));
         return result;
+    }
+
+    private void sanitize(ConversationRecord record) {
+        record.title = SecretRedactionGuardrail.redactTitle(record.title);
+        record.model = SecretRedactionGuardrail.redact(record.model, settings.current());
+        record.messages = new ArrayList<>(record.messages.stream()
+                .map(message -> SecretRedactionGuardrail.sanitizeMessage(message, settings.current())).toList());
+        for (TurnRecord turn : record.turns) {
+            turn.userText = SecretRedactionGuardrail.redact(turn.userText, settings.current());
+            turn.reply = SecretRedactionGuardrail.redact(turn.reply, settings.current());
+            turn.reason = SecretRedactionGuardrail.redact(turn.reason, settings.current());
+        }
     }
 
     /**

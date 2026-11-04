@@ -64,6 +64,7 @@ import net.talaatharb.harness.history.ConversationStore;
 import net.talaatharb.harness.rag.RagService;
 import net.talaatharb.harness.history.ConversationSummary;
 import net.talaatharb.harness.history.TurnRecord;
+import net.talaatharb.harness.guardrails.SecretRedactionGuardrail;
 import net.talaatharb.harness.llm.Attachment;
 import net.talaatharb.harness.llm.ChatMessage;
 import net.talaatharb.harness.llm.Role;
@@ -138,10 +139,11 @@ public class MainController {
         final List<Attachment> attachments;
         AssistantTurnView view;
 
-        Exchange(TurnRecord turn, List<Attachment> attachments) {
+        Exchange(TurnRecord turn, List<Attachment> attachments, HarnessSettings settings) {
             this.turn = turn;
             this.attachments = List.copyOf(attachments);
-            this.userNode = ChatBubbles.user(turn.userText, this.attachments);
+            this.userNode = ChatBubbles.user(SecretRedactionGuardrail.redact(turn.userText, settings),
+                    this.attachments.stream().map(a -> SecretRedactionGuardrail.sanitizeAttachment(a, settings)).toList());
         }
     }
 
@@ -197,7 +199,7 @@ public class MainController {
                         setGraphic(null);
                         return;
                     }
-                    Label title = new Label(item.title());
+                    Label title = new Label(SecretRedactionGuardrail.redact(item.title()));
                     title.getStyleClass().add("history-title");
                     Label meta = new Label((item.updatedAt() == null ? "" : HISTORY_TIME.format(item.updatedAt()))
                             + " · " + item.turns() + (item.turns() == 1 ? " message" : " messages"));
@@ -306,6 +308,11 @@ public class MainController {
     @FXML
     private void onOpenSettings() {
         settingsWindow.show(messagesBox.getScene().getWindow());
+    }
+
+    @FXML
+    private void onBenchmarks() {
+        new BenchmarkWindow(java.nio.file.Path.of("benchmark")).show(messagesBox.getScene().getWindow());
     }
 
     @FXML
@@ -475,7 +482,7 @@ public class MainController {
 
     private Exchange addExchange(TurnRecord turn, HarnessSettings settings, List<Attachment> attachments) {
         messagesBox.getChildren().remove(emptyLabel);
-        Exchange exchange = new Exchange(turn, attachments);
+        Exchange exchange = new Exchange(turn, attachments, settings);
         exchange.view = new AssistantTurnView(settings.reply, this::send, () -> regenerate(exchange));
         exchanges.add(exchange);
         messagesBox.getChildren().addAll(exchange.userNode, exchange.view.root());
@@ -542,7 +549,8 @@ public class MainController {
             } catch (Throwable t) {
                 LOG.error("Agent run crashed", t);
                 Platform.runLater(() -> {
-                    exchange.view.notice("Unexpected error: " + t.getMessage());
+                    exchange.view.notice(SecretRedactionGuardrail.redact("Unexpected error: " + t.getMessage(),
+                            store.current()));
                     turn.complete(new AgentRunResult(AgentRunResult.Status.ERROR, null, t.getMessage(), 0, 0));
                     persist(runRecord, runConversation);
                     if (cancelFlag == cancel) {
@@ -571,6 +579,11 @@ public class MainController {
     private void runAgent(String text, List<Attachment> attachments, AssistantTurnView turn, Conversation transcript, AtomicBoolean cancel,
             java.util.function.Consumer<AgentRunResult> onDone) {
         agentLoop.run(text, attachments, transcript, new AgentListener() {
+            @Override
+            public void onContext(List<ChatMessage> messages) {
+                Platform.runLater(() -> turn.showContext(messages));
+            }
+
             @Override
             public void onToken(String token) {
                 Platform.runLater(() -> turn.appendToken(token));
@@ -621,7 +634,8 @@ public class MainController {
     }
 
     private void showError(String message) {
-        Alert alert = new Alert(Alert.AlertType.ERROR, message, ButtonType.OK);
+        Alert alert = new Alert(Alert.AlertType.ERROR,
+                SecretRedactionGuardrail.redact(message, store.current()), ButtonType.OK);
         alert.initOwner(root.getScene().getWindow());
         alert.setHeaderText(null);
         alert.show();
@@ -730,7 +744,8 @@ public class MainController {
     }
 
     private void showAttachProblems(List<String> problems) {
-        Alert alert = new Alert(Alert.AlertType.WARNING, String.join("\n", problems), ButtonType.OK);
+        Alert alert = new Alert(Alert.AlertType.WARNING,
+                SecretRedactionGuardrail.redact(String.join("\n", problems), store.current()), ButtonType.OK);
         alert.initOwner(root.getScene().getWindow());
         alert.setHeaderText("Some files were not attached");
         alert.show();
@@ -738,7 +753,8 @@ public class MainController {
 
     private void renderPending() {
         attachmentsBar.getChildren().setAll(pending.stream()
-                .map(a -> (Node) AttachmentViews.chip(a, () -> pending.remove(a))).toList());
+                .map(a -> (Node) AttachmentViews.chip(
+                        SecretRedactionGuardrail.sanitizeAttachment(a, store.current()), () -> pending.remove(a))).toList());
         boolean any = !pending.isEmpty();
         attachmentsBar.setVisible(any);
         attachmentsBar.setManaged(any);

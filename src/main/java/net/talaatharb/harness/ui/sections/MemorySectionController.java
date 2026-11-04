@@ -55,7 +55,7 @@ public class MemorySectionController implements SettingsSection {
     @FXML private TextField locationField;
     @FXML private Spinner<Integer> contextSpinner;
     @FXML private Spinner<Integer> recallSpinner;
-    @FXML private Spinner<Integer> duplicateSpinner;
+    @FXML private javafx.scene.control.CheckBox directRememberCheck;
     @FXML private TextField searchField;
     @FXML private Label statusLabel;
     @FXML private ListView<MemoryEntry> memoryList;
@@ -127,7 +127,7 @@ public class MemorySectionController implements SettingsSection {
         MemorySettings s = settings.memory == null ? new MemorySettings() : settings.memory;
         SettingsSection.intSpinner(contextSpinner, 0, 50, s.maxContextMemories);
         SettingsSection.intSpinner(recallSpinner, 1, 100, s.maxRecallResults);
-        SettingsSection.intSpinner(duplicateSpinner, 30, 100, s.duplicateThresholdPercent);
+        directRememberCheck.setSelected(s.directRememberRequests);
         updating = true;
         backendCombo.setValue(s.backend);
         updating = false;
@@ -143,7 +143,7 @@ public class MemorySectionController implements SettingsSection {
         settings.memory.backend = backend();
         settings.memory.maxContextMemories = SettingsSection.spinnerValue(contextSpinner);
         settings.memory.maxRecallResults = SettingsSection.spinnerValue(recallSpinner);
-        settings.memory.duplicateThresholdPercent = SettingsSection.spinnerValue(duplicateSpinner);
+        settings.memory.directRememberRequests = directRememberCheck.isSelected();
     }
 
     private MemorySettings.Backend backend() {

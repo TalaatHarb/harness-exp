@@ -2,6 +2,7 @@
 
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
 <?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ListView?>
@@ -18,7 +19,8 @@
     <padding><Insets top="16" right="16" bottom="16" left="16"/></padding>
     <Label text="Memory" styleClass="section-title"/>
     <Label wrapText="true" styleClass="section-help"
-           text="Long-term memory shared by all conversations. The agent saves facts with the remember tool (near-duplicates are skipped) and searches them with recall. The context builder's 'memory' stage adds the memories relevant to each message. Memories are kept as markdown files (one &lt;id&gt;.md each, easy to edit or sync) or in a MapDB file; set the locations in the Storage tab. Edits here are saved straight away; the backend and numbers below apply with Apply/Save."/>
+           text="Long-term memory shared by all conversations. The agent saves facts with the remember tool and searches them with recall. Only identical text is deduplicated (ignoring case and whitespace); word overlap does not merge facts. To update a memory through remember, supply its id as replace_id. The context builder's 'memory' stage adds the memories relevant to each message. Memories are kept as markdown files (one &lt;id&gt;.md each, easy to edit or sync) or in a MapDB file; set the locations in the Storage tab. Edits here are saved straight away; the backend and limits below apply with Apply/Save."/>
+    <CheckBox fx:id="directRememberCheck" text="Save single-sentence 'Remember that ...' requests verbatim through the approved tool"/>
     <HBox spacing="6" alignment="CENTER_LEFT">
         <Label text="Backend:"/>
         <ComboBox fx:id="backendCombo" prefWidth="130"/>
@@ -34,10 +36,6 @@
         </Spinner>
         <Label text="Recall results"/>
         <Spinner fx:id="recallSpinner" prefWidth="80"/>
-        <Label text="Duplicate threshold (%)"/>
-        <Spinner fx:id="duplicateSpinner" prefWidth="80">
-            <tooltip><Tooltip text="remember skips a new memory when this share of its words is already in an existing one"/></tooltip>
-        </Spinner>
     </HBox>
     <HBox spacing="6" alignment="CENTER_LEFT">
         <TextField fx:id="searchField" promptText="Search memories…" HBox.hgrow="ALWAYS"/>

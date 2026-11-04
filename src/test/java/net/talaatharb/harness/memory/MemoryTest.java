@@ -100,24 +100,24 @@ class MemoryTest {
 
     @ParameterizedTest
     @EnumSource(MemorySettings.Backend.class)
-    void rememberSkipsDuplicatesAndExtendsCoveredMemories(MemorySettings.Backend backend) throws Exception {
+    void rememberOnlySkipsIdenticalTextAndRequiresExplicitReplacement(MemorySettings.Backend backend) throws Exception {
         MemoryService memory = service(backend);
         var added = memory.remember("The user's favourite language is Kotlin", List.of("languages"), null, "agent");
         assertEquals(MemoryService.Outcome.ADDED, added.outcome());
 
-        var same = memory.remember("the user's favourite language is kotlin!", List.of(), null, "agent");
+        var same = memory.remember("the user's favourite language is kotlin", List.of(), null, "agent");
         assertEquals(MemoryService.Outcome.DUPLICATE, same.outcome());
         assertEquals(added.entry().id, same.entry().id);
 
-        var covered = memory.remember("Favourite language: Kotlin", List.of("prefs"), null, "agent");
+        var covered = memory.remember("The user's favourite language is Kotlin", List.of("prefs"), null, "agent");
         assertEquals(MemoryService.Outcome.DUPLICATE, covered.outcome());
         assertEquals(List.of("languages", "prefs"), memory.active().get(added.entry().id).orElseThrow().tags);
 
         var extended = memory.remember("The user's favourite language is Kotlin, mostly for Android apps",
                 List.of(), null, "agent");
-        assertEquals(MemoryService.Outcome.UPDATED, extended.outcome());
-        assertEquals(added.entry().id, extended.entry().id);
-        assertEquals("The user's favourite language is Kotlin", extended.previous().text);
+        assertEquals(MemoryService.Outcome.ADDED, extended.outcome());
+        assertEquals("The user's favourite language is Kotlin",
+                memory.active().get(added.entry().id).orElseThrow().text);
 
         var different = memory.remember("The user lives in Alexandria", List.of(), null, "agent");
         assertEquals(MemoryService.Outcome.ADDED, different.outcome());
@@ -125,7 +125,7 @@ class MemoryTest {
         var replaced = memory.remember("The user moved to Cairo", List.of("location"), different.entry().id, "user");
         assertEquals(MemoryService.Outcome.UPDATED, replaced.outcome());
         assertEquals("The user moved to Cairo", memory.active().get(different.entry().id).orElseThrow().text);
-        assertEquals(2, memory.active().list().size());
+        assertEquals(3, memory.active().list().size());
 
         assertThrows(IllegalArgumentException.class, () -> memory.remember(" ", List.of(), null, "agent"));
         assertThrows(IllegalArgumentException.class, () -> memory.remember("x", List.of(), "missing-id", "agent"));
@@ -163,7 +163,7 @@ class MemoryTest {
                 "tags", List.of("drinks")));
         assertTrue(first.success(), first.output());
         assertTrue(first.output().startsWith("Remembered as ["), first.output());
-        ToolResult again = remember.execute(Map.of("text", "User prefers tea over coffee", "tags", "drinks"));
+        ToolResult again = remember.execute(Map.of("text", "The user prefers tea over coffee", "tags", "drinks"));
         assertTrue(again.output().startsWith("Already remembered"), again.output());
         assertFalse(remember.execute(Map.of()).success());
 

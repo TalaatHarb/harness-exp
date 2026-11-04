@@ -32,7 +32,7 @@ separate **⚙ Harness** settings window, one tab per harness concern.
 | Model | Provider (`ollama` local/cloud, `openai`, `anthropic`), base URL, API key, model, timeout, streaming, max output tokens. See [Cloud models](#cloud-models-openai--anthropic) | `llm` |
 | System prompt | Template with `{{date}}`, `{{time}}`, `{{model}}`, `{{os}}`, `{{user}}` variables | `prompt` |
 | Skills | Edits the skills folder (`~/.harness-exp/skills/<id>/SKILL.md`): new / save / delete / revert, plus **⟳ Refresh** to pick up outside edits or agent-created skills. Skills are injected always or only when trigger words match | `skills` folder |
-| Memory | Long-term memories: backend (Markdown folder or MapDB), how many go into the context, recall limit, duplicate threshold; list / search / add / edit / delete memories and copy them to the other backend. See [Memory](#memory) | `memory` |
+| Memory | Long-term memories: backend (Markdown folder or MapDB), context/recall limits, direct explicit writes; list / search / add / edit / delete memories and copy them to the other backend. See [Memory](#memory) | `memory` |
 | RAG | Per-conversation documents: automatic context on/off, embedder (Ollama embedding model or built-in offline) with a **Test** button, chunk size/overlap, passages in context, search limits, min similarity, max file size. See [RAG](#rag-documents) | `rag` |
 | Context builder | Ordered `ContextContributor` pipeline (toggleable), history window, pinned context, attachment limits | `context` |
 | Tools + MCP | Built-in tools, enable/disable, output cap, MCP servers (stdio / streamable HTTP) with live status, test, reconnect and `mcp.json` import | `tools` |
@@ -271,11 +271,23 @@ Tools for the agent:
 
 | Tool | Risk | What it does |
 |---|---|---|
-| `remember` | sensitive (asks for approval under the default policy) | Saves `text` with optional `tags`. If an existing memory already covers it (word overlap ≥ the duplicate threshold, default 80%), nothing new is added and only new tags are merged. If the new text covers an existing memory, that memory is updated instead. `replace_id` rewrites a specific memory, e.g. to correct an outdated fact |
+| `remember` | sensitive (asks for approval under the default policy) | Saves `text` with optional `tags`, or a `facts` array of up to 20 text/object entries. Only identical text (ignoring case/whitespace) is deduplicated; shared words do not prove facts are equivalent. `replace_id` explicitly rewrites an existing memory |
 | `recall` | safe | Searches memories by `query` (ranked by rare-word overlap and tags; empty query = most recent) and returns up to `limit` results with their ids |
 
 The **memory** context stage (between skills and the tool catalog; it can be disabled in Context builder) adds up to
 *N* memories relevant to the latest user message to the system prompt. It adds nothing when none match.
+
+Simple single-sentence **"Remember that ..."** requests are routed directly through the same guarded, approved
+`remember` tool by default, preserving the entire statement instead of asking the model to extract only some facts.
+Disable this in **Memory** to experiment with model-driven writes. Multi-sentence requests, attachments and other
+wordings still use the model; explicit writes cannot be declared completed without an actual tool attempt.
+For explicit writes with no successful call, the harness supplies the failure/denial response itself.
+
+All batch entries are validated before writing. Storage writes are **not a transaction across the batch**: on a
+later failure the tool reports exactly which earlier entries were saved. Successful confirmations include saved
+contents and remain available even with tool trace hidden. Storage failures are explicit, not silently redirected
+to volatile memory. The old `duplicateThresholdPercent` JSON field is retained for compatibility but ignored;
+use `replace_id` to correct a fact rather than relying on approximate overlap.
 
 The **Memory** tab lists the memories (newest first) with search. You can add, edit, delete (with confirmation) and
 revert memories by hand, and **Copy all to …** copies every memory to the other backend, keeping the same ids.
@@ -426,9 +438,105 @@ Every chat message has a **⧉ Copy** button underneath it (assistant replies co
 uncaught exceptions) are logged via SLF4J to stderr; e.g. `-Dorg.slf4j.simpleLogger.logFile=harness.log`
 writes them to a file.
 
+## Benchmark
+
+[`benchmark/conversational-tasks.md`](benchmark/conversational-tasks.md) is a manual checklist of 38 conversational
+tasks. They cover basic Q&A, multi-turn context, the system prompt, skills, tools and approval, memory, RAG,
+attachments, guardrails, loop limits and robustness. Each task has pass criteria and a score sheet, so you can compare
+models and harness setups.
+
+### Automated, isolated runs
+
+Use the console runner rather than putting live-model expectations in the normal test suite. It runs the **same
+AgentLoop, tools, context contributors, guardrails and approval service** without starting JavaFX. Maven tests use
+scripted providers for deterministic harness regressions; live-model runs are explicitly opt-in:
+
+```powershell
+mvn -B -q package -DskipTests
+java -jar target\harness-exp-0.1.0-jar-with-dependencies.jar --benchmark conversational --model qwen2.5:3b --temperature 0 --seed 42 --output qwen-run1.json
+```
+
+Reports live in **`benchmark`** by default: that command writes `benchmark\qwen-run1.json`. Without `--output`,
+a model-and-timestamp filename is generated there. An explicit output path with a directory is respected.
+The existing `benchmark\qwen2.5-3b-run2.json` can be viewed without conversion.
+
+Click **Benchmarks** in the main window to browse run reports. Select a run to see its filename, model, date,
+suite and conclusion, then a turn to read the prompt, response, automated failures and manual-review criteria.
+Settings exports and suite definitions are omitted from the list. **Refresh** picks up new files; **Choose folder**
+opens another report directory. The viewer is read-only and never executes model-generated UI or tool actions.
+Manual-review text describes an assessment still needed, not a judge-model score.
+
+`--benchmark` without a name still runs the conversational suite. To add another benchmark, save the same JSON
+suite format as `benchmark\travel-suite.json`, then use `--benchmark travel`. Alternatively, `--benchmark --suite
+PATH` selects any suite file; do not combine a named benchmark with `--suite`.
+
+Add `--repeat 3` to measure consistency, `--settings exported-settings.json` to use an exported configuration, or
+`--provider openai --model MODEL` / `--provider anthropic --model MODEL` for cloud runs (normal API-key environment
+variables apply). `--base-url` overrides the endpoint. `--help` lists the options. Seed support is provider-specific,
+not a guarantee of identical output; Anthropic does not support a seed.
+
+Every case gets fresh storage below an automatically created temporary directory; it is deleted after the run,
+including on failure. Imported **storage overrides are always discarded**. Desktop history, memories, RAG data,
+external skills and dynamic tools are not loaded. Exported skills (or bundled defaults without an export) initialize the
+isolated store. MCP is disabled, as are `create_tool`, `read_file` and `rag_add`. Only `remember` and `create_skill`
+can be auto-approved, and only when a case explicitly lists them. This is data isolation, **not an OS sandbox**.
+Exported model/context configuration still goes to the chosen provider: inspect it before running cloud tests.
+
+[`benchmark/conversational-suite.json`](benchmark/conversational-suite.json) is a starter subset with multi-turn
+conversation switches, approved/denied memory writes, a small RAG fixture and output/context checks. Use `--suite`
+to select another JSON suite. Each case supports `settings` overrides, `approveTools`, an optional `document`, and
+`turns` with `prompt`, `conversation`, `exact`, `contains`, `excludes`, `tools`, `savedMemories`, `memoryCount`,
+`contextExcludes`, `status`, and `review`. Contains/excludes checks are case-insensitive; exact replies are trimmed
+and case-sensitive. Cases are independent; named conversations within a case share memory but not documents.
+Use built-in embeddings in a case override if you do not have `nomic-embed-text` installed.
+
+The JSON report records effective settings without the API key, replies, tool outcomes, iterations, latency and
+check failures. Known credential patterns are redacted. **Passing automated checks is not a conversational quality
+score**: translation, factuality, haiku metre and other subjective checks remain flagged for manual review.
+The runner refuses to overwrite an existing report. Exit codes: `0` automated checks passed, `1` check failures,
+`2` invalid configuration or execution failure. The original 0/1/2 manual scores are kept separately.
+Editable forms, file/audio/vision attachments, RAG copying, desktop restart and Stop/Continue remain manual/UI
+checks; the starter suite is not a claim that all 38 tasks are automated.
+
+### Reliability controls
+
+Known credential patterns are redacted before model context and RAG embedding calls, from new history records and
+displayed text, and from conversation titles **before truncation**. Titles are sanitized even when guardrails are
+disabled; old titles are sanitized when read. With secret redaction enabled, raw streamed tokens are buffered until
+the response is guarded, so credentials split across token boundaries cannot briefly appear onscreen.
+Stop preserves any safe partial response in history with a separate interruption notice; Continue has that context
+but is not an exact provider-level stream resume.
+
+This is best-effort pattern detection, **not a guarantee that every possible secret is recognized**. Binary images
+and audio are not scanned for credentials. Previously exposed keys should be rotated: sanitizing displayed records
+does not securely erase old database pages, existing indexes, backups or logs. Disabling redaction allows raw text
+egress again (except titles). Do not put credentials in prompts or indexed documents.
+
+**Reply & UI** has opt-in response contracts: exact list length, maximum bullets, or allowed exact replies separated
+by `|`. Contracts apply to model-generated final answers until reset (not authoritative action confirmations)
+and get at most three correction attempts, still bounded by the overall loop
+limits. Generated UI is schema-validated too. These checks enforce structure, not truth or English syllable counts.
+The optional **sent context inspector** shows the sanitized context actually sent, including retrieved memory and
+document passages, so missing context can be distinguished from a model ignoring it.
+
+Editable UI uses `form` containers and named `input` components (`props.name`, `props.inputType` of `text`, `date` or
+`number`, optional `required`, `value` and `placeholder`). A form's `action` and submitted field values go back to
+the agent; they do not themselves make bookings or execute tools. Required fields, dates, numeric values and UI
+schema/size limits are checked locally. Static action buttons remain supported.
+
+**Model** offers optional temperature and seed controls; blank preserves provider defaults. Ollama supports
+non-negative temperatures and signed 32-bit seeds; OpenAI supports temperature 0..2 and 64-bit seeds where the
+selected endpoint/model allows them. Anthropic supports temperature 0..1 and rejects a configured seed explicitly.
+Provider restrictions still apply; a seed is not a reproducibility guarantee.
+
+The `calculate` tool offers bounded arithmetic and exact primality checking; it does not execute source code.
+Having a tool available does not guarantee a model will use it. Ground factual answers with trusted RAG documents
+or an appropriately configured MCP tool rather than expecting prompt instructions to cure hallucinations.
+
 ## CI / Releases
 
-- `.github/workflows/project-build.yml`: `mvn verify` on every push/PR.
+- `.github/workflows/project-build.yml`: `mvn verify` under Xvfb on every push/PR, including JavaFX smoke tests
+  without a real display. Live-model benchmarks are not part of CI.
 - `.github/workflows/release-build.yml`: on `v*` tags, builds fat jars for Linux/Windows/macOS and a Windows
   portable app (jpackage) and attaches them to the GitHub release.
 

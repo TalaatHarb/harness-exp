@@ -80,7 +80,11 @@ public class AnthropicModelProvider implements ModelProvider {
     public ModelReply chat(ModelSettings config, ModelRequest request, Consumer<String> tokenSink)
             throws ModelProviderException {
         long start = System.currentTimeMillis();
+        config.validateSampling(ID);
         ObjectNode body = body(request, config.maxOutputTokens);
+        if (config.temperature != null) {
+            body.put("temperature", config.temperature);
+        }
         String url = HttpJson.url(config, DEFAULT_URL, "/v1/messages");
         if (!request.stream()) {
             JsonNode res = HttpJson.post(url, headers(config), body, config, "Anthropic");
