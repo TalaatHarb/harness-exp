@@ -2,6 +2,7 @@
 
 <?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
+<?import javafx.scene.control.CheckBox?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.Spinner?>
 <?import javafx.scene.control.TextArea?>
@@ -19,6 +20,15 @@
     <HBox spacing="8" alignment="CENTER_LEFT">
         <Label text="History window (messages)"/>
         <Spinner fx:id="historySpinner" prefWidth="100"/>
+    </HBox>
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <CheckBox fx:id="compactionCheck" text="Summarize older history when it overflows"/>
+        <Label text="token budget (0 = window only)"/>
+        <Spinner fx:id="compactionBudgetSpinner" prefWidth="110" editable="true"/>
+        <Label text="keep recent"/>
+        <Spinner fx:id="compactionKeepSpinner" prefWidth="80" editable="true"/>
+        <Label text="summary words"/>
+        <Spinner fx:id="compactionWordsSpinner" prefWidth="90" editable="true"/>
     </HBox>
     <HBox spacing="8" alignment="CENTER_LEFT">
         <Label text="Attachments: max files"/>

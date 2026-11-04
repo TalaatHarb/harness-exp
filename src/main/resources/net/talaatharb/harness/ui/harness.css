@@ -92,6 +92,21 @@
     -fx-text-fill: #4b5563;
 }
 
+.markdown {
+    -fx-spacing: 6;
+}
+
+.markdown-link {
+    -fx-fill: #1d4ed8;
+    -fx-underline: true;
+}
+
+.image-placeholder {
+    -fx-padding: 4 8 4 8;
+    -fx-background-color: #e5e7eb;
+    -fx-background-radius: 6;
+}
+
 .trace {
     -fx-font-family: "Consolas", "Menlo", monospace;
     -fx-font-size: 11px;

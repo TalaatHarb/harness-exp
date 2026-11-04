@@ -120,15 +120,21 @@ public class OllamaModelProvider implements ModelProvider {
             OllamaChatResult result = client(config).chat(chatRequest.build(), observer);
             String content = null;
             String thinking = null;
-            if (result != null && result.getResponseModel() != null
-                    && result.getResponseModel().getMessage() != null) {
-                content = result.getResponseModel().getMessage().getResponse();
-                thinking = result.getResponseModel().getMessage().getThinking();
+            Integer promptTokens = null;
+            Integer completionTokens = null;
+            if (result != null && result.getResponseModel() != null) {
+                promptTokens = result.getResponseModel().getPromptEvalCount();
+                completionTokens = result.getResponseModel().getEvalCount();
+                if (result.getResponseModel().getMessage() != null) {
+                    content = result.getResponseModel().getMessage().getResponse();
+                    thinking = result.getResponseModel().getMessage().getThinking();
+                }
             }
             if ((content == null || content.isEmpty()) && streamed.length() > 0) {
                 content = streamed.toString();
             }
-            return new ModelReply(content, thinking, System.currentTimeMillis() - start);
+            return new ModelReply(content, thinking, System.currentTimeMillis() - start, promptTokens,
+                    completionTokens);
         } catch (Exception e) {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();

@@ -13,6 +13,8 @@ public class TurnRecord {
     public AgentRunResult.Status status;
     public String reply;
     public String reason;
+    /** Redacted run timeline (absent for turns saved before timelines existed). */
+    public net.talaatharb.harness.trace.RunTimeline timeline;
 
     public TurnRecord() {
     }

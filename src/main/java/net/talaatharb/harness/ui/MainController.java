@@ -103,6 +103,9 @@ public class MainController {
     /** Files attached in the composer for the next message. */
     private final ObservableList<Attachment> pending = FXCollections.observableArrayList();
     private final IntegerProperty loadingAttachments = new SimpleIntegerProperty();
+    /** "Allow all images" for Markdown replies, kept in sync with {@code reply.allowImages}. */
+    private final javafx.beans.property.BooleanProperty imagesAllowed =
+            new javafx.beans.property.SimpleBooleanProperty();
     private Future<?> running;
     private AtomicBoolean cancelFlag;
     private final SpeechToText speech;
@@ -175,7 +178,16 @@ public class MainController {
             if (!model.equals(modelCombo.getValue())) {
                 modelCombo.setValue(model);
             }
+            imagesAllowed.set(store.current().reply.allowImages);
         }));
+        imagesAllowed.set(store.current().reply.allowImages);
+        imagesAllowed.addListener((obs, was, allowed) -> {
+            if (allowed != store.current().reply.allowImages) {
+                HarnessSettings updated = store.copy();
+                updated.reply.allowImages = allowed;
+                store.replace(updated);
+            }
+        });
         initHistory();
         pruneOrphanDocuments();
         updateKnowledgeButton();
@@ -449,6 +461,7 @@ public class MainController {
         record = rec;
         conversation = new Conversation(rec.id);
         conversation.replaceAll(rec.messages);
+        conversation.setSummary(rec.summary, rec.summarizedCount);
         exchanges.clear();
         messagesBox.getChildren().clear();
         HarnessSettings settings = store.current();
@@ -460,6 +473,7 @@ public class MainController {
             for (int m = Math.max(0, turn.messageStart + 1); m < Math.min(end, rec.messages.size()); m++) {
                 exchange.view.replay(rec.messages.get(m));
             }
+            exchange.view.setTimeline(turn.timeline);
             exchange.view.finish(turn.toResult());
         }
         if (exchanges.isEmpty()) {
@@ -483,7 +497,7 @@ public class MainController {
     private Exchange addExchange(TurnRecord turn, HarnessSettings settings, List<Attachment> attachments) {
         messagesBox.getChildren().remove(emptyLabel);
         Exchange exchange = new Exchange(turn, attachments, settings);
-        exchange.view = new AssistantTurnView(settings.reply, this::send, () -> regenerate(exchange));
+        exchange.view = new AssistantTurnView(settings.reply, this::send, () -> regenerate(exchange), imagesAllowed);
         exchanges.add(exchange);
         messagesBox.getChildren().addAll(exchange.userNode, exchange.view.root());
         return exchange;
@@ -541,6 +555,7 @@ public class MainController {
             try {
                 runAgent(text, attachments, exchange.view, runConversation, cancel, result -> {
                     turn.complete(result);
+                    turn.timeline = exchange.view.timeline();
                     persist(runRecord, runConversation);
                     if (cancelFlag == cancel) {
                         setRunning(false);
@@ -563,6 +578,8 @@ public class MainController {
 
     private void persist(ConversationRecord rec, Conversation transcript) {
         rec.messages = new ArrayList<>(transcript.snapshot());
+        rec.summary = transcript.summary();
+        rec.summarizedCount = transcript.summarizedCount();
         rec.model = store.current().model.model;
         if (rec != record) {
             // A run finishing after the user switched chats: honour any rename made since.
@@ -612,6 +629,11 @@ public class MainController {
             @Override
             public void onNotice(String notice) {
                 Platform.runLater(() -> turn.notice(notice));
+            }
+
+            @Override
+            public void onTimeline(net.talaatharb.harness.trace.RunTimeline timeline) {
+                Platform.runLater(() -> turn.setTimeline(timeline));
             }
 
             @Override

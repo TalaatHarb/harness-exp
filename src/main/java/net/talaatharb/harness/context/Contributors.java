@@ -177,6 +177,32 @@ public final class Contributors {
         }
     }
 
+    public static class ConversationSummary implements ContextContributor {
+        @Override
+        public String id() {
+            return "conversation-summary";
+        }
+
+        @Override
+        public String description() {
+            return "Running summary of older messages compacted out of the history window";
+        }
+
+        @Override
+        public int order() {
+            return 950;
+        }
+
+        @Override
+        public void contribute(ContextAssembly a) {
+            if (a.conversationSummary() != null) {
+                a.addSystemSection("## Earlier conversation (summary)\nOlder messages were compacted. This summary "
+                        + "replaces them; it may omit details, so ask the user if something important is missing.\n"
+                        + a.conversationSummary());
+            }
+        }
+    }
+
     public static class HistoryWindow implements ContextContributor {
         @Override
         public String id() {

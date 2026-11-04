@@ -19,4 +19,12 @@ public class ContextSettings {
     public int maxAttachmentMb = 20;
     /** Text extracted from a markdown/text/PDF attachment is cut after this many characters. */
     public int maxAttachmentTextChars = 60_000;
+    /** Summarize older messages (with the chat model) instead of silently dropping them from the window. */
+    public boolean compactionEnabled = true;
+    /** Compact when the not-yet-summarized history exceeds this estimate; 0 uses the message window only. */
+    public int compactionTokenBudget = 6_000;
+    /** Most recent messages always kept verbatim after compaction. */
+    public int compactionKeepRecent = 6;
+    /** Target length of the running summary. */
+    public int compactionSummaryWords = 250;
 }

@@ -21,7 +21,22 @@ separate **⚙ Harness** settings window, one tab per harness concern.
 - **📚 Documents (RAG)**: a per-conversation knowledge base for large files, folders or pasted text; the button
   shows how many documents the chat has. See [RAG](#rag-documents).
 - **🎤 Voice input**: talk instead of typing with the mic button or **Ctrl+M**. See [Voice input](#voice-input--transcription).
+- **Markdown replies**: replies are rendered as Markdown with [MDFX](https://github.com/JPro-one/jpro-platform)
+  (headings, lists, tables, and syntax-highlighted code for about 24 languages, including Java, Python, JS/TS,
+  C/C++, Go, Rust, SQL, JSON, XML/HTML, YAML and shell). Single line breaks are kept, so plain-text answers and
+  poems look the same as before. Each reply has a **Raw / Markdown** toggle, and **Copy** always copies the raw text.
+  - **Math**: `$…$` and `\(…\)` render inline, and `$$…$$` and `\[…\]` render as display formulas. They are
+    drawn locally with [JLaTeXMath](https://github.com/opencollab/jlatexmath), so nothing is fetched. Amounts like
+    `$5 and $10` stay text, math inside code is left alone, `\$` is a literal dollar, and a formula that can't be
+    parsed is shown as its TeX source.
+  - Images are not fetched until you click **Load image** or **Allow all images**, because a remote image URL
+    chosen by the model can leak data.
+  - Links open in your browser only after you confirm them; only `http`, `https` and `mailto` links can be opened.
+  - Both switches are in **Reply & UI**. While a reply streams it is shown as plain text, and it is rendered
+    once it finishes.
 - **Tool trace**: tool calls and their results are shown above the reply (toggle in **Reply & UI**).
+- **Timeline**: a collapsed pane under each reply showing context size per contributor, model/tool latency, tokens
+  and repairs. See [Run timeline](#run-timeline--context-compaction).
 
 ![The agent calling tools while answering](img/ToolUsage.PNG)
 
@@ -34,12 +49,12 @@ separate **⚙ Harness** settings window, one tab per harness concern.
 | Skills | Edits the skills folder (`~/.harness-exp/skills/<id>/SKILL.md`): new / save / delete / revert, plus **⟳ Refresh** to pick up outside edits or agent-created skills. Skills are injected always or only when trigger words match | `skills` folder |
 | Memory | Long-term memories: backend (Markdown folder or MapDB), context/recall limits, direct explicit writes; list / search / add / edit / delete memories and copy them to the other backend. See [Memory](#memory) | `memory` |
 | RAG | Per-conversation documents: automatic context on/off, embedder (Ollama embedding model or built-in offline) with a **Test** button, chunk size/overlap, passages in context, search limits, min similarity, max file size. See [RAG](#rag-documents) | `rag` |
-| Context builder | Ordered `ContextContributor` pipeline (toggleable), history window, pinned context, attachment limits | `context` |
+| Context builder | Ordered `ContextContributor` pipeline (toggleable), history window, conversation compaction, pinned context, attachment limits; the preview shows estimated tokens per contributor | `context` |
 | Tools + MCP | Built-in tools, enable/disable, output cap, MCP servers (stdio / streamable HTTP) with live status, test, reconnect and `mcp.json` import | `tools` |
 | Agent loop | Iteration/tool-call/duration/repeat/error limits (clamped by hard ceilings in `AgentLoopLimits`) and `HookPoint`s | `agent` |
 | Guardrails | Input/tool-call/output guardrails: length limit, blocked terms, secret redaction | `guardrails` |
 | Human approval | Never / risky tools / all tools, always-allowed list, timeout (denies and closes the dialog). Tools that run agent-written code (`create_tool`, dynamic tools) or rewrite its instructions (`create_skill`) and `DANGEROUS` tools need approval on **every** call, whatever the policy, and can't be "always allowed" | `approval` |
-| Reply | Plain text or **agentic UI**: the model emits ```` ```ui ```` JSON blocks rendered as live JavaFX components | `reply` |
+| Reply | Markdown or raw text, plus **agentic UI**: the model emits ```` ```ui ```` JSON blocks rendered as live JavaFX components; image permission and tool trace, thinking, sent-context and run-timeline toggles | `reply` |
 | Speech | Voice input on/off, send right after dictation, transcribe audio attachments, language, max recording length, model download | `speech` |
 | Storage | External locations for the skills folder, dynamic tools folder, MapDB history file, local models folder, memory folder, memory DB and RAG index folder (browse or type; blank = default). Applies after restart | `storage` |
 
@@ -419,9 +434,45 @@ Notes:
 - Usage is billed by the provider. The agent-loop limits in the **Agent loop** section also cap how many paid calls one message can make.
 - Errors such as an invalid key (HTTP 401) or an unknown model are shown in the chat and logged.
 
+## Future tasks
+
+Planned, task-agnostic harness experiments (not specific to coding or any other domain):
+
+- [ ] **Run timeline** (first version done, see [below](#run-timeline--context-compaction)): next, a timeline
+  export, cost per provider/model, and timelines in benchmark reports.
+- [ ] **Context compaction** (first version done): next, a real tokenizer per provider, using the model's context
+  length instead of a fixed budget, and viewing/editing the stored summary.
+- [ ] **Benchmark comparison**: compare runs side by side (pass rate, per-task diffs, regressions between harness
+  settings or models) with optional judge-model scoring for manual-review tasks, clearly labelled as such.
+- [ ] **Conversation branching**: edit an earlier message and continue from it as a new branch, keeping the
+  original branch, instead of Regenerate discarding later turns.
+
+## Run timeline & context compaction
+
+**Timeline.** Every agent run records a `RunTimeline` (package `trace`): each context assembly with its estimated
+size per contributor (system prompt, skills, tools, memory, RAG, summary, history…), each model call with latency
+and tokens, each tool call with its duration and outcome, repair requests (malformed tool calls, response contracts),
+compaction, and the final status. Token counts reported by the provider (Ollama `prompt_eval_count`/`eval_count`,
+OpenAI/Anthropic `usage`) are shown as-is; otherwise they are estimated at about four characters per token and
+marked `~`. The timeline is redacted like other displayed text, shown collapsed under the reply, saved with the turn
+in history, capped at 300 events, and can be hidden with **Reply & UI → Show run timeline**. Hooks can read the
+live one via `AgentRunContext.timeline()`.
+
+**Compaction.** Older messages used to just fall out of the history window. Now, when the part of a conversation
+that hasn't been summarized exceeds the history window (messages) or the token budget (estimated), the older part
+is merged into a running summary by the chat model; the most recent messages (default 6, moved back to start at a
+user message where possible) stay verbatim. The model then gets the summary as an **Earlier conversation
+(summary)** system section (`conversation-summary` contributor) followed by the recent messages. The full
+transcript is still kept and shown; the summary is stored with the conversation, extended incrementally on later
+overflows, and discarded when Regenerate rewinds into the summarized part. Text is redacted before it is sent to
+the summarizer. If summarizing fails, the run continues with the plain sliding window and a notice. Configure it
+in **Context builder** (on/off, token budget with 0 = message window only, messages kept, summary length).
+Compaction costs an extra model call, and a summary can lose details, so the summary section tells the model to ask
+when something important seems missing.
+
 ## Running
 
-Requirements: Java 17+, Maven, and either [Ollama](https://ollama.com) running locally or a cloud API key (ollama.com, OpenAI or Anthropic; see [Cloud models](#cloud-models-openai--anthropic)).
+Requirements: Java 25+ (JavaFX 25 and the Markdown renderer need it), Maven, and either [Ollama](https://ollama.com) running locally or a cloud API key (ollama.com, OpenAI or Anthropic; see [Cloud models](#cloud-models-openai--anthropic)).
 
 ```sh
 ollama pull qwen2.5:3b
@@ -429,6 +480,10 @@ mvn javafx:run          # run from source
 mvn verify              # tests + fat jar in target/
 java -jar target/harness-exp-0.1.0-jar-with-dependencies.jar
 ```
+
+The Maven launcher uses the classpath for all JavaFX libraries, matching the packaged app. Keep core JavaFX
+and its incubator libraries together when configuring an IDE launch; mixing the module path and classpath can
+break code highlighting with an `IllegalAccessError`.
 
 Settings are stored in `~/.harness-exp/settings.json` (override with `-Dharness.settings=<path>`).
 Skills, dynamic tools, the history DB, local speech models, memories and RAG documents default to the same folder (`skills/`, `dynamic-tools/`, `history.db`, `models/`, `memory/`, `memory.db`, `rag-index/`). Each can be moved to any external location in the **Storage** section, which writes the `storage` block of settings.json. Relative paths are resolved against the settings folder and `~` is your home folder. Changes apply after a restart, and existing data is not moved. Only the default skills ship inside the jar; they are copied into an empty skills folder.
@@ -537,10 +592,10 @@ or an appropriately configured MCP tool rather than expecting prompt instruction
 
 ## CI / Releases
 
-- `.github/workflows/project-build.yml`: `mvn verify` under Xvfb on every push/PR, including JavaFX smoke tests
-  without a real display. Live-model benchmarks are not part of CI.
-- `.github/workflows/release-build.yml`: on `v*` tags, builds fat jars for Linux/Windows/macOS and a Windows
-  portable app (jpackage) and attaches them to the GitHub release.
+- `.github/workflows/project-build.yml`: `mvn verify` on Java 25 under Xvfb on every push/PR, including JavaFX
+  smoke tests without a real display. Live-model benchmarks are not part of CI.
+- `.github/workflows/release-build.yml`: on `v*` tags, builds fat jars on Java 25 for Linux/Windows/macOS and a
+  Windows portable app (jpackage) and attaches them to the GitHub release.
 
 ## License
 

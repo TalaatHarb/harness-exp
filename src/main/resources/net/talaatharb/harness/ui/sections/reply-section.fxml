@@ -24,7 +24,14 @@
         <CheckBox fx:id="traceCheck" text="Show tool trace"/>
         <CheckBox fx:id="thinkingCheck" text="Show model thinking"/>
     </HBox>
-    <CheckBox fx:id="contextCheck" text="Show sent context (read-only inspector)"/>
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <CheckBox fx:id="contextCheck" text="Show sent context (read-only inspector)"/>
+        <CheckBox fx:id="timelineCheck" text="Show run timeline (context sizes, latency, tokens)"/>
+    </HBox>
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <CheckBox fx:id="markdownCheck" text="Render replies as Markdown"/>
+        <CheckBox fx:id="imagesCheck" text="Allow all images in replies (fetches remote URLs)"/>
+    </HBox>
     <Label text="Optional model response contract (0 or blank disables; applies until reset)"/>
     <HBox spacing="8">
         <Label text="Exact list items"/><Spinner fx:id="listSpinner" prefWidth="80" editable="true"/>

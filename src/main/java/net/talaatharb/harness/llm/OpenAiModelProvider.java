@@ -92,12 +92,20 @@ public class OpenAiModelProvider implements ModelProvider {
             JsonNode res = HttpJson.post(url, headers(config), body, config, "OpenAI");
             JsonNode message = res.path("choices").path(0).path("message");
             return new ModelReply(message.path("content").asText(""), reasoning(message),
-                    System.currentTimeMillis() - start);
+                    System.currentTimeMillis() - start, ModelReply.count(res.path("usage").get("prompt_tokens")),
+                    ModelReply.count(res.path("usage").get("completion_tokens")));
         }
         body.put("stream", true);
         StringBuilder content = new StringBuilder();
         StringBuilder thinking = new StringBuilder();
+        Integer[] usage = { null, null };
         HttpJson.postStream(url, headers(config), body, config, "OpenAI", chunk -> {
+            // Only servers that send usage on their own (or when asked via stream_options) report it.
+            JsonNode reported = chunk.path("usage");
+            if (reported.isObject()) {
+                usage[0] = ModelReply.count(reported.get("prompt_tokens"));
+                usage[1] = ModelReply.count(reported.get("completion_tokens"));
+            }
             JsonNode delta = chunk.path("choices").path(0).path("delta");
             String text = delta.path("content").asText("");
             if (!text.isEmpty()) {
@@ -112,7 +120,7 @@ public class OpenAiModelProvider implements ModelProvider {
             }
         });
         return new ModelReply(content.toString(), thinking.isEmpty() ? null : thinking.toString(),
-                System.currentTimeMillis() - start);
+                System.currentTimeMillis() - start, usage[0], usage[1]);
     }
 
     /** Some compatible servers (DeepSeek, vLLM, OpenRouter) return reasoning text next to the content. */

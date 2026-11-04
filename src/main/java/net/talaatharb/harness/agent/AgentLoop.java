@@ -17,7 +17,9 @@ import net.talaatharb.harness.approval.ApprovalDecision;
 import net.talaatharb.harness.approval.ApprovalService;
 import net.talaatharb.harness.config.HarnessSettings;
 import net.talaatharb.harness.config.SettingsStore;
+import net.talaatharb.harness.context.ContextBuild;
 import net.talaatharb.harness.context.ContextBuilder;
+import net.talaatharb.harness.context.TokenEstimator;
 import net.talaatharb.harness.guardrails.GuardrailResult;
 import net.talaatharb.harness.guardrails.GuardrailService;
 import net.talaatharb.harness.guardrails.GuardrailStage;
@@ -128,6 +130,12 @@ public class AgentLoop {
         } else if (result.status() != Status.COMPLETED) {
             LOG.warn("Agent run {} ended with {}: {}", ctx.runId(), result.status(), result.reason());
         }
+        ctx.timeline().end(result.status().name(), result.reason());
+        try {
+            listener.onTimeline(ctx.timeline().redacted(text -> SecretRedactionGuardrail.redact(text, settings)));
+        } catch (RuntimeException e) {
+            LOG.warn("Run {}: timeline listener failed", ctx.runId(), e);
+        }
         listener.onFinished(result);
         return result;
     }
@@ -184,8 +192,10 @@ public class AgentLoop {
             conversation.add(ChatMessage.assistant(recorded));
             listener.onNotice("Explicit memory request: saving the full fact through the approved tool.");
             listener.onToolCall(safeToolCall(call, s));
+            long toolStart = ctx.timeline().elapsed();
             ToolResult raw = executeTool(ctx, call, listener);
             ToolResult outcome = new ToolResult(raw.success(), SecretRedactionGuardrail.redact(raw.output(), s));
+            ctx.timeline().tool(call.name(), toolStart, outcome.success(), outcome.output());
             ctx.setLastToolResult(outcome);
             listener.onToolResult(safeToolCall(call, s), outcome);
             hooks.fire(HookPoint.AFTER_TOOL_CALL, ctx);
@@ -206,6 +216,7 @@ public class AgentLoop {
                     SecretRedactionGuardrail.redact(e.toString(), s));
             return result(ctx, Status.ERROR, null, e.getMessage());
         }
+        compactIfNeeded(ctx, conversation, provider, listener);
 
         int repairs = 0;
         // An explicit write request must not be satisfied by a generated card or an unsupported success claim.
@@ -223,7 +234,9 @@ public class AgentLoop {
             ctx.nextIteration();
 
             // Guard after all contributors (including tools, memory and RAG), not only the latest user text.
-            List<ChatMessage> assembled = new ArrayList<>(contextBuilder.build(s, conversation.snapshot()));
+            ContextBuild build = contextBuilder.buildDetailed(s, conversation.unsummarized(),
+                    conversation.summary());
+            List<ChatMessage> assembled = new ArrayList<>(build.messages());
             if (requiredTool != null && !ctx.attempted(requiredTool)) {
                 String instruction = "The user explicitly requested a memory write. You must call "
                         + "`remember` with every requested fact before replying. A UI card or an assurance does not "
@@ -249,6 +262,8 @@ public class AgentLoop {
             }
             context = List.copyOf(context);
             ctx.setLastContext(context);
+            int contextTokens = TokenEstimator.estimate(context);
+            ctx.timeline().context(build, ctx.iteration(), context.size(), contextTokens);
             hooks.fire(HookPoint.BEFORE_MODEL_CALL, ctx);
             if (ctx.abortReason() != null) {
                 return result(ctx, Status.ABORTED, null, ctx.abortReason());
@@ -257,6 +272,7 @@ public class AgentLoop {
 
             ModelReply reply;
             ctx.resetStream();
+            long modelStart = ctx.timeline().elapsed();
             try {
                 // A credential can span arbitrary chunks: never publish unguarded partial tokens.
                 reply = provider.chat(s.model, new ModelRequest(s.model.model, context, s.model.streaming),
@@ -268,6 +284,7 @@ public class AgentLoop {
                         });
                 ctx.clearErrors();
             } catch (ModelProviderException e) {
+                ctx.timeline().modelFailed(modelStart, ctx.iteration(), e.getMessage());
                 AgentRunResult interrupted = checkStop(ctx, limits);
                 if (interrupted != null) {
                     return interrupted;
@@ -284,6 +301,7 @@ public class AgentLoop {
                 continue;
             }
             ctx.setLastReply(reply);
+            ctx.timeline().model(modelStart, ctx.iteration(), reply, contextTokens);
             if (ctx.partialReply().isEmpty()) {
                 ctx.appendStream(reply.content());
             }
@@ -330,6 +348,7 @@ public class AgentLoop {
                     conversation.add(ChatMessage.assistant(safe));
                     conversation.add(ChatMessage.tool("response_contract", reason
                             + "\nCorrect the response without repeating tool actions."));
+                    ctx.timeline().repair(reason);
                     listener.onIntermediateReply(safe);
                     listener.onNotice(reason + " Asking the model to correct it (" + repairs + "/" + maxRepairs + ").");
                     ctx.resetStream();
@@ -342,6 +361,7 @@ public class AgentLoop {
                 LOG.warn("Run {}: malformed tool call ({}), asking the model to correct it", ctx.runId(),
                         SecretRedactionGuardrail.redact(malformed.get(), s));
                 ctx.recordError(new IllegalArgumentException("Malformed tool call: " + malformed.get()));
+                ctx.timeline().repair("Malformed tool call: " + malformed.get());
                 hooks.fire(HookPoint.ON_ERROR, ctx);
                 listener.onNotice(SecretRedactionGuardrail.redact(
                         "Malformed tool call (" + malformed.get() + "), asking the model to fix it", s));
@@ -367,13 +387,43 @@ public class AgentLoop {
                         + " times with identical arguments");
             }
 
+            long toolStart = ctx.timeline().elapsed();
             ToolResult rawResult = executeTool(ctx, toolCall, listener);
             ToolResult toolResult = new ToolResult(rawResult.success(),
                     SecretRedactionGuardrail.redact(rawResult.output(), s));
+            ctx.timeline().tool(toolCall.name(), toolStart, toolResult.success(), toolResult.output());
             ctx.setLastToolResult(toolResult);
             listener.onToolResult(displayCall, toolResult);
             hooks.fire(HookPoint.AFTER_TOOL_CALL, ctx);
             conversation.add(ChatMessage.tool(toolCall.name(), formatToolResult(toolCall, toolResult, s)));
+        }
+    }
+
+    private void compactIfNeeded(AgentRunContext ctx, Conversation conversation, ModelProvider provider,
+            AgentListener listener) {
+        HarnessSettings s = ctx.settings();
+        Optional<ConversationCompactor.Plan> plan = ConversationCompactor.plan(conversation, s.context);
+        if (plan.isEmpty() || ctx.cancelled()) {
+            return;
+        }
+        ConversationCompactor.Plan p = plan.get();
+        long start = ctx.timeline().elapsed();
+        listener.onNotice("Compacting " + p.messages().size() + " older messages into the conversation summary…");
+        try {
+            ConversationCompactor.Result summary = ConversationCompactor.summarize(provider, s, p);
+            if (ctx.cancelled()) {
+                return;
+            }
+            conversation.setSummary(summary.summary(), p.end());
+            String detail = "Summarized " + p.messages().size() + " messages: ~" + p.tokensBefore() + " → ~"
+                    + TokenEstimator.estimate(summary.summary()) + " tokens";
+            LOG.info("Run {}: {}", ctx.runId(), detail);
+            ctx.timeline().compaction(start, detail, summary.reply(), false);
+        } catch (ModelProviderException | RuntimeException e) {
+            String reason = SecretRedactionGuardrail.redact(e.getMessage(), s);
+            LOG.warn("Run {}: context compaction failed: {}", ctx.runId(), reason);
+            ctx.timeline().compaction(start, "Failed: " + reason, null, true);
+            listener.onNotice("Context compaction failed; using the recent-message window only: " + reason);
         }
     }
 

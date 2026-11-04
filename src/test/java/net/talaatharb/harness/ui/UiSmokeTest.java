@@ -101,11 +101,21 @@ class UiSmokeTest {
                 direct.setSelected(false);
                 var context = (javafx.scene.control.CheckBox) replyRoot.lookup("#contextCheck");
                 context.setSelected(true);
+                var timeline = (javafx.scene.control.CheckBox) replyRoot.lookup("#timelineCheck");
+                assertTrue(timeline.isSelected());
+                timeline.setSelected(false);
+                Parent contextRoot = (Parent) loader.getNamespace().get("contextSection");
+                var compaction = (javafx.scene.control.CheckBox) contextRoot.lookup("#compactionCheck");
+                assertTrue(compaction.isSelected());
+                compaction.setSelected(false);
                 nodes(root).stream().filter(n -> n instanceof Button b && b.getText().equals("Apply"))
                         .map(Button.class::cast).findFirst().orElseThrow().fire();
                 var settings = injector.getInstance(net.talaatharb.harness.config.SettingsStore.class).current();
                 assertFalse(settings.memory.directRememberRequests);
                 assertTrue(settings.reply.showContext);
+                assertFalse(settings.reply.showTimeline);
+                assertFalse(settings.context.compactionEnabled);
+                assertEquals(6, settings.context.compactionKeepRecent);
             });
         } finally {
             injector.getInstance(net.talaatharb.harness.tools.mcp.McpClientManager.class).close();
@@ -204,6 +214,30 @@ class UiSmokeTest {
     }
 
     @Test
+    void timelineIsShownCollapsedUnderTheReplyAndCanBeHidden() throws Exception {
+        fx(() -> {
+            net.talaatharb.harness.trace.RunTimeline timeline = new net.talaatharb.harness.trace.RunTimeline("m");
+            timeline.tool("calculate", 0, true, "4");
+            timeline.end("COMPLETED", null);
+            ReplySettings settings = new ReplySettings();
+            AssistantTurnView view = new AssistantTurnView(settings, s -> {}, null);
+            view.setTimeline(timeline);
+            view.finish(new AgentRunResult(AgentRunResult.Status.COMPLETED, "Four", null, 1, 1));
+            TitledPane pane = view.root().getChildren().stream().filter(TitledPane.class::isInstance)
+                    .map(TitledPane.class::cast).filter(p -> p.getText().startsWith("Timeline · "))
+                    .findFirst().orElseThrow();
+            assertFalse(pane.isExpanded());
+            assertTrue(((TextArea) pane.getContent()).getText().contains("calculate"));
+            assertTrue(view.root().getChildren().indexOf(pane) > 0, "shown after the reply");
+            settings.showTimeline = false;
+            AssistantTurnView hidden = new AssistantTurnView(settings, s -> {}, null);
+            hidden.setTimeline(timeline);
+            hidden.finish(new AgentRunResult(AgentRunResult.Status.COMPLETED, "Four", null, 1, 1));
+            assertTrue(hidden.root().getChildren().stream().noneMatch(TitledPane.class::isInstance));
+        });
+    }
+
+    @Test
     void contextInspectorIsExplicitReadOnlyAndKeepsSourceMarkers() throws Exception {
         fx(() -> {
             List<ChatMessage> context = List.of(ChatMessage.system(
@@ -223,6 +257,80 @@ class UiSmokeTest {
             assertTrue(text.getText().contains("source.md"));
             assertTrue(text.getText().contains("[truncated]"));
         });
+    }
+
+    static final String MARKDOWN_REPLY = "# Title\nLine one\nLine two\n\n- **bold** item\n- second\n\n"
+            + "| A | B |\n|---|---|\n| 1 | 2 |\n\n```java\nint x = 1;\n```\n\n"
+            + "![logo](https://example.invalid/x.png)\n\nSee [the site](https://example.com) and <b>tag</b>, 3 < 4.";
+
+    @Test
+    void repliesRenderAsMarkdownWithRawToggleBlockedImagesAndConfirmedLinks() throws Exception {
+        fx(() -> {
+            javafx.beans.property.BooleanProperty images = new javafx.beans.property.SimpleBooleanProperty(false);
+            AssistantTurnView view = new AssistantTurnView(new ReplySettings(), s -> {}, null, images);
+            view.finish(new AgentRunResult(AgentRunResult.Status.COMPLETED, MARKDOWN_REPLY, null, 1, 0));
+            ChatMarkdownView markdown = view.root().getChildren().stream().filter(ChatMarkdownView.class::isInstance)
+                    .map(ChatMarkdownView.class::cast).findFirst().orElseThrow();
+            String text = texts(markdown);
+            assertTrue(text.contains("Title"), text);
+            assertFalse(text.contains("**"), text);
+            assertTrue(text.replace("|", "").contains("int x = 1;"), text);
+            assertTrue(text.contains("Line one|\n|Line two"), "single line breaks are kept: " + text);
+            assertTrue(text.contains("3 < 4"), text);
+
+            ChatMarkdownView math = new ChatMarkdownView("Solve $a(x)y'' + b(x)y' + c(x)y = g(x)$ and $\\nosuchcmd{x}$",
+                    new javafx.beans.property.SimpleBooleanProperty(), s -> {});
+            assertEquals(1, nodes(math).stream().filter(n -> n.getStyleClass().contains("math-inline")).count());
+            assertEquals(1, nodes(math).stream().filter(n -> n.getStyleClass().contains("math-error")).count());
+
+            Node placeholder = nodes(markdown).stream()
+                    .filter(n -> n.getStyleClass().contains("image-placeholder")).findFirst().orElseThrow();
+            assertTrue(labels(placeholder).stream().anyMatch(l -> l.contains("Image not loaded")));
+            Button allowAll = nodes(placeholder).stream().filter(Button.class::isInstance).map(Button.class::cast)
+                    .filter(b -> b.getText().equals("Allow all images")).findFirst().orElseThrow();
+            allowAll.fire();
+            assertTrue(images.get());
+            assertTrue(nodes(markdown).stream().noneMatch(n -> n.getStyleClass().contains("image-placeholder")));
+
+            Button raw = nodes(view.root()).stream().filter(Button.class::isInstance).map(Button.class::cast)
+                    .filter(b -> b.getText().equals("Raw")).findFirst().orElseThrow();
+            raw.fire();
+            assertTrue(labels(view.root()).contains(MARKDOWN_REPLY));
+            assertFalse(view.root().getChildren().contains(markdown));
+            raw.fire();
+            assertTrue(view.root().getChildren().contains(markdown));
+
+            List<String> opened = new ArrayList<>();
+            ChatMarkdownView direct = new ChatMarkdownView("[the site](https://example.com)",
+                    new javafx.beans.property.SimpleBooleanProperty(), opened::add);
+            Node link = nodes(direct).stream().filter(n -> n.getStyleClass().contains("markdown-link"))
+                    .findFirst().orElseThrow();
+            link.getOnMouseClicked().handle(new javafx.scene.input.MouseEvent(
+                    javafx.scene.input.MouseEvent.MOUSE_CLICKED, 0, 0, 0, 0, javafx.scene.input.MouseButton.PRIMARY,
+                    1, false, false, false, false, true, false, false, false, false, false, null));
+            assertEquals(List.of("https://example.com"), opened);
+
+            ReplySettings plain = new ReplySettings();
+            plain.renderMarkdown = false;
+            AssistantTurnView rawView = new AssistantTurnView(plain, s -> {}, null);
+            rawView.finish(new AgentRunResult(AgentRunResult.Status.COMPLETED, MARKDOWN_REPLY, null, 1, 0));
+            assertTrue(labels(rawView.root()).contains(MARKDOWN_REPLY));
+            assertTrue(nodes(rawView.root()).stream().noneMatch(ChatMarkdownView.class::isInstance));
+            assertTrue(nodes(rawView.root()).stream().filter(Button.class::isInstance)
+                    .noneMatch(b -> ((Button) b).getText().equals("Raw")));
+        });
+    }
+
+    private static String texts(Node root) {
+        StringBuilder out = new StringBuilder();
+        for (Node n : nodes(root)) {
+            if (n instanceof javafx.scene.text.Text t) {
+                out.append(t.getText()).append('|');
+            } else if (n instanceof Label l) {
+                out.append(l.getText()).append('|');
+            }
+        }
+        return out.toString();
     }
 
     private static void fx(Runnable assertion) throws Exception {

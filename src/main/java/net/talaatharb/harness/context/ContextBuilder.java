@@ -27,12 +27,39 @@ public class ContextBuilder {
     }
 
     public List<ChatMessage> build(HarnessSettings settings, List<ChatMessage> history) {
+        return buildDetailed(settings, history, null).messages();
+    }
+
+    /**
+     * Builds the context and records how much each contributor added.
+     *
+     * @param history             messages not covered by {@code conversationSummary}
+     * @param conversationSummary summary of older, compacted messages ({@code null} if none)
+     */
+    public ContextBuild buildDetailed(HarnessSettings settings, List<ChatMessage> history,
+            String conversationSummary) {
         String latestUser = history.stream().filter(m -> m.role() == Role.USER).reduce((a, b) -> b)
                 .map(ChatMessage::content).orElse("");
         ContextAssembly assembly = new ContextAssembly(settings, history, latestUser);
+        assembly.setConversationSummary(conversationSummary);
+        List<ContextSection> sections = new ArrayList<>();
         for (ContextContributor c : contributors) {
-            if (!settings.context.disabledContributors.contains(c.id())) {
-                c.contribute(assembly);
+            if (settings.context.disabledContributors.contains(c.id())) {
+                continue;
+            }
+            int sectionCount = assembly.systemSections().size();
+            int messageCount = assembly.conversation().size();
+            c.contribute(assembly);
+            List<String> addedSections = assembly.systemSections().subList(
+                    Math.min(sectionCount, assembly.systemSections().size()), assembly.systemSections().size());
+            List<ChatMessage> addedMessages = assembly.conversation().subList(
+                    Math.min(messageCount, assembly.conversation().size()), assembly.conversation().size());
+            int chars = addedSections.stream().mapToInt(String::length).sum()
+                    + addedMessages.stream().mapToInt(m -> m.contentForModel().length()).sum();
+            int tokens = addedSections.stream().mapToInt(TokenEstimator::estimate).sum()
+                    + TokenEstimator.estimate(addedMessages);
+            if (chars > 0 || !addedMessages.isEmpty()) {
+                sections.add(new ContextSection(c.id(), addedMessages.size(), chars, tokens));
             }
         }
         List<ChatMessage> messages = new ArrayList<>();
@@ -44,6 +71,6 @@ public class ContextBuilder {
         } else {
             messages.addAll(assembly.conversation());
         }
-        return messages;
+        return new ContextBuild(messages, sections);
     }
 }

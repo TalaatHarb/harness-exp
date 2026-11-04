@@ -103,6 +103,7 @@ public class AppModule extends AbstractModule {
         context.addBinding().to(Contributors.ToolCatalog.class);
         context.addBinding().to(Contributors.ReplyInstructions.class);
         context.addBinding().to(Contributors.PinnedContext.class);
+        context.addBinding().to(Contributors.ConversationSummary.class);
         context.addBinding().to(Contributors.HistoryWindow.class);
 
         Multibinder<AgentHook> hooks = Multibinder.newSetBinder(binder(), AgentHook.class);

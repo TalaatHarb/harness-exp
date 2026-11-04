@@ -4,9 +4,16 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.Tooltip;
 import javafx.scene.control.TitledPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.layout.VBox;
@@ -23,6 +30,7 @@ import net.talaatharb.harness.tools.ToolResult;
 
 /** Renders one assistant turn: streamed text, compact tool trace, then the final (possibly generated) UI. */
 class AssistantTurnView {
+    private static final Logger LOG = LoggerFactory.getLogger(AssistantTurnView.class);
     private static final int TRACE_PREVIEW_CHARS = 160;
 
     private final ReplySettings settings;
@@ -30,16 +38,27 @@ class AssistantTurnView {
     private final Runnable onRegenerate;
     private final VBox root = new VBox(6);
     private final Label stream = ChatBubbles.textLabel("…", "bubble", "bubble-assistant", "streaming");
+    private final BooleanProperty imagesAllowed;
+    /** Markdown bubbles of the final reply with their raw-text alternatives (for the Raw/Markdown toggle). */
+    private final List<Node[]> markdownBubbles = new ArrayList<>();
     private boolean receivedTokens;
+    private net.talaatharb.harness.trace.RunTimeline timeline;
+
+    AssistantTurnView(ReplySettings settings, Consumer<String> actionSink, Runnable onRegenerate) {
+        this(settings, actionSink, onRegenerate, new SimpleBooleanProperty(settings.allowImages));
+    }
 
     /**
-     * @param actionSink   receives messages from buttons in generated UI
-     * @param onRegenerate reruns this turn; {@code null} hides the regenerate button
+     * @param actionSink    receives messages from buttons in generated UI
+     * @param onRegenerate  reruns this turn; {@code null} hides the regenerate button
+     * @param imagesAllowed shared "allow all images" switch for Markdown images
      */
-    AssistantTurnView(ReplySettings settings, Consumer<String> actionSink, Runnable onRegenerate) {
+    AssistantTurnView(ReplySettings settings, Consumer<String> actionSink, Runnable onRegenerate,
+            BooleanProperty imagesAllowed) {
         this.settings = settings;
         this.actionSink = actionSink;
         this.onRegenerate = onRegenerate;
+        this.imagesAllowed = imagesAllowed;
         root.getStyleClass().add("assistant-turn");
         root.getChildren().add(stream);
     }
@@ -167,7 +186,7 @@ class AssistantTurnView {
         if (result.status() == AgentRunResult.Status.COMPLETED) {
             for (ReplySegment segment : ReplyFormat.parse(result.reply(), settings.mode)) {
                 if (segment instanceof ReplySegment.Text text) {
-                    root.getChildren().add(ChatBubbles.textLabel(text.text(), "bubble", "bubble-assistant"));
+                    root.getChildren().add(textBubble(text.text()));
                 } else if (segment instanceof ReplySegment.Ui ui) {
                     VBox holder = new VBox(DynamicUiRenderer.render(ui.component(), actionSink));
                     holder.getStyleClass().add("generated-ui");
@@ -196,10 +215,74 @@ class AssistantTurnView {
         }
     }
 
+    private Node textBubble(String text) {
+        Label raw = ChatBubbles.textLabel(text, "bubble", "bubble-assistant");
+        if (!settings.renderMarkdown) {
+            return raw;
+        }
+        try {
+            Node markdown = new ChatMarkdownView(text, imagesAllowed, UiSupport::confirmOpenLink);
+            markdownBubbles.add(new Node[] { markdown, raw });
+            return markdown;
+        } catch (RuntimeException | LinkageError e) {
+            LOG.error("Markdown rendering failed; showing raw text", e);
+            return raw;
+        }
+    }
+
+    /** Switches this reply between rendered Markdown and the raw model text. */
+    private Button rawToggle() {
+        Button button = new Button("Raw");
+        button.getStyleClass().addAll("copy-button", "raw-toggle");
+        button.setFocusTraversable(false);
+        button.setTooltip(new Tooltip("Show the raw model text / the rendered Markdown"));
+        button.setOnAction(e -> {
+            boolean showRaw = "Raw".equals(button.getText());
+            for (Node[] pair : markdownBubbles) {
+                Node from = showRaw ? pair[0] : pair[1];
+                Node to = showRaw ? pair[1] : pair[0];
+                int index = root.getChildren().indexOf(from);
+                if (index >= 0) {
+                    root.getChildren().set(index, to);
+                }
+            }
+            button.setText(showRaw ? "Markdown" : "Raw");
+        });
+        return button;
+    }
+
+    /** Shown (collapsed) under the reply when {@link #finish} runs; also kept for persisting the turn. */
+    void setTimeline(net.talaatharb.harness.trace.RunTimeline timeline) {
+        this.timeline = timeline;
+    }
+
+    net.talaatharb.harness.trace.RunTimeline timeline() {
+        return timeline;
+    }
+
+    private void addTimeline() {
+        if (!settings.showTimeline || timeline == null || timeline.events.isEmpty()) {
+            return;
+        }
+        TextArea text = new TextArea(timeline.toText());
+        text.setEditable(false);
+        text.setWrapText(false);
+        text.setPrefRowCount(Math.min(14, timeline.events.size() + 4));
+        text.getStyleClass().add("mono");
+        TitledPane pane = new TitledPane("Timeline · " + timeline.headline(), text);
+        pane.setExpanded(false);
+        pane.getStyleClass().add("run-timeline");
+        root.getChildren().add(pane);
+    }
+
     private void addActions(String text) {
+        addTimeline();
         List<Node> actions = new ArrayList<>();
         if (text != null && !text.isBlank()) {
             actions.add(ChatBubbles.copyButton(() -> text));
+        }
+        if (!markdownBubbles.isEmpty()) {
+            actions.add(rawToggle());
         }
         if (onRegenerate != null) {
             actions.add(ChatBubbles.regenerateButton(onRegenerate));

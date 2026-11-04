@@ -158,10 +158,15 @@ public class ConversationStore implements AutoCloseable {
         record.model = SecretRedactionGuardrail.redact(record.model, settings.current());
         record.messages = new ArrayList<>(record.messages.stream()
                 .map(message -> SecretRedactionGuardrail.sanitizeMessage(message, settings.current())).toList());
+        record.summary = SecretRedactionGuardrail.redact(record.summary, settings.current());
         for (TurnRecord turn : record.turns) {
             turn.userText = SecretRedactionGuardrail.redact(turn.userText, settings.current());
             turn.reply = SecretRedactionGuardrail.redact(turn.reply, settings.current());
             turn.reason = SecretRedactionGuardrail.redact(turn.reason, settings.current());
+            if (turn.timeline != null) {
+                turn.timeline = turn.timeline.redacted(
+                        text -> SecretRedactionGuardrail.redact(text, settings.current()));
+            }
         }
     }
 

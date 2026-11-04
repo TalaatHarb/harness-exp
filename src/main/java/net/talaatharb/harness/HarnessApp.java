@@ -35,6 +35,7 @@ public class HarnessApp extends Application {
 
     @Override
     public void start(Stage stage) throws IOException {
+        UiSupport.setHostServices(getHostServices());
         FXMLLoader loader = new FXMLLoader(getClass().getResource("ui/main.fxml"));
         loader.setControllerFactory(injector::getInstance);
         Parent root = loader.load();

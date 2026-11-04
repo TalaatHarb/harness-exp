@@ -98,14 +98,24 @@ public class AnthropicModelProvider implements ModelProvider {
                 }
             }
             return new ModelReply(content.toString(), thinking.isEmpty() ? null : thinking.toString(),
-                    System.currentTimeMillis() - start);
+                    System.currentTimeMillis() - start, ModelReply.count(res.path("usage").get("input_tokens")),
+                    ModelReply.count(res.path("usage").get("output_tokens")));
         }
         body.put("stream", true);
         StringBuilder content = new StringBuilder();
         StringBuilder thinking = new StringBuilder();
         String[] error = { null };
+        Integer[] usage = { null, null };
         HttpJson.postStream(url, headers(config), body, config, "Anthropic", event -> {
             switch (event.path("type").asText()) {
+                case "message_start" -> usage[0] = ModelReply.count(
+                        event.path("message").path("usage").get("input_tokens"));
+                case "message_delta" -> {
+                    Integer output = ModelReply.count(event.path("usage").get("output_tokens"));
+                    if (output != null) {
+                        usage[1] = output;
+                    }
+                }
                 case "content_block_delta" -> {
                     JsonNode delta = event.path("delta");
                     if ("text_delta".equals(delta.path("type").asText())) {
@@ -126,7 +136,7 @@ public class AnthropicModelProvider implements ModelProvider {
             throw new ModelProviderException("Anthropic stream failed: " + error[0]);
         }
         return new ModelReply(content.toString(), thinking.isEmpty() ? null : thinking.toString(),
-                System.currentTimeMillis() - start);
+                System.currentTimeMillis() - start, usage[0], usage[1]);
     }
 
     /**

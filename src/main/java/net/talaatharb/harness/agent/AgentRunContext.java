@@ -38,6 +38,7 @@ public class AgentRunContext {
     private final java.util.Set<String> deniedTools = new java.util.HashSet<>();
     private final java.util.Set<String> attemptedTools = new java.util.HashSet<>();
     private final java.util.Set<String> successfulTools = new java.util.HashSet<>();
+    private final net.talaatharb.harness.trace.RunTimeline timeline;
 
     AgentRunContext(String userMessage, List<Attachment> attachments, HarnessSettings settings,
             AtomicBoolean cancelled) {
@@ -45,6 +46,13 @@ public class AgentRunContext {
         this.attachments = attachments == null ? List.of() : List.copyOf(attachments);
         this.settings = settings;
         this.cancelled = cancelled;
+        this.timeline = new net.talaatharb.harness.trace.RunTimeline(
+                settings.model == null ? null : settings.model.provider + " · " + settings.model.model);
+    }
+
+    /** Steps recorded so far (unredacted; listeners receive a redacted copy). */
+    public net.talaatharb.harness.trace.RunTimeline timeline() {
+        return timeline;
     }
 
     public String runId() {

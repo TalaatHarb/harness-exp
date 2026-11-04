@@ -27,6 +27,9 @@ public class ReplySectionController implements SettingsSection {
     @FXML private CheckBox traceCheck;
     @FXML private CheckBox thinkingCheck;
     @FXML private CheckBox contextCheck;
+    @FXML private CheckBox timelineCheck;
+    @FXML private CheckBox markdownCheck;
+    @FXML private CheckBox imagesCheck;
     @FXML private Spinner<Integer> listSpinner;
     @FXML private Spinner<Integer> bulletsSpinner;
     @FXML private Spinner<Integer> repairSpinner;
@@ -46,6 +49,9 @@ public class ReplySectionController implements SettingsSection {
         traceCheck.setSelected(s.reply.showToolTrace);
         thinkingCheck.setSelected(s.reply.showThinking);
         contextCheck.setSelected(s.reply.showContext);
+        timelineCheck.setSelected(s.reply.showTimeline);
+        markdownCheck.setSelected(s.reply.renderMarkdown);
+        imagesCheck.setSelected(s.reply.allowImages);
         SettingsSection.intSpinner(listSpinner, 0, 100, s.reply.exactListItems);
         SettingsSection.intSpinner(bulletsSpinner, 0, 100, s.reply.maxBulletPoints);
         SettingsSection.intSpinner(repairSpinner, 0, 3, s.reply.maxRepairAttempts);
@@ -58,6 +64,9 @@ public class ReplySectionController implements SettingsSection {
         s.reply.showToolTrace = traceCheck.isSelected();
         s.reply.showThinking = thinkingCheck.isSelected();
         s.reply.showContext = contextCheck.isSelected();
+        s.reply.showTimeline = timelineCheck.isSelected();
+        s.reply.renderMarkdown = markdownCheck.isSelected();
+        s.reply.allowImages = imagesCheck.isSelected();
         s.reply.exactListItems = SettingsSection.spinnerValue(listSpinner);
         s.reply.maxBulletPoints = SettingsSection.spinnerValue(bulletsSpinner);
         s.reply.maxRepairAttempts = SettingsSection.spinnerValue(repairSpinner);

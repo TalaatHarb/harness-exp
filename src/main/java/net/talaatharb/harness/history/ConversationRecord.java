@@ -24,6 +24,9 @@ public class ConversationRecord {
     public String model;
     public List<ChatMessage> messages = new ArrayList<>();
     public List<TurnRecord> turns = new ArrayList<>();
+    /** Running summary of the first {@link #summarizedCount} messages (context compaction), or {@code null}. */
+    public String summary;
+    public int summarizedCount;
 
     public static ConversationRecord create() {
         ConversationRecord record = new ConversationRecord();

@@ -15,6 +15,7 @@ public class ContextAssembly {
     private final String conversationId;
     private final List<String> systemSections = new ArrayList<>();
     private final List<ChatMessage> conversation = new ArrayList<>();
+    private String conversationSummary;
 
     /** Uses the conversation of the agent run on this thread ({@link ConversationScope}). */
     public ContextAssembly(HarnessSettings settings, List<ChatMessage> history, String latestUserMessage) {
@@ -58,5 +59,14 @@ public class ContextAssembly {
 
     public List<ChatMessage> conversation() {
         return conversation;
+    }
+
+    /** Summary of older messages that were compacted out of {@link #history()}, or {@code null}. */
+    public String conversationSummary() {
+        return conversationSummary;
+    }
+
+    public void setConversationSummary(String summary) {
+        conversationSummary = summary == null || summary.isBlank() ? null : summary.strip();
     }
 }

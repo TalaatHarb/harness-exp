@@ -28,6 +28,10 @@ public interface AgentListener {
     default void onNotice(String notice) {
     }
 
+    /** Redacted record of the run; invoked once, just before {@link #onFinished}. */
+    default void onTimeline(net.talaatharb.harness.trace.RunTimeline timeline) {
+    }
+
     /** Terminal callback; always invoked exactly once per run. */
     default void onFinished(AgentRunResult result) {
     }

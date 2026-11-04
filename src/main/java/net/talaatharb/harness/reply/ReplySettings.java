@@ -17,6 +17,12 @@ public class ReplySettings {
     /** Show the model's thinking text (for reasoning models) when available. */
     public boolean showThinking = false;
     public boolean showContext = false;
+    /** Collapsed per-reply timeline (context sizes, model/tool latency, tokens). */
+    public boolean showTimeline = true;
+    /** Render reply text as Markdown (headings, lists, tables, code); off shows the raw text. */
+    public boolean renderMarkdown = true;
+    /** Load images referenced by Markdown replies without asking (remote image URLs can leak data). */
+    public boolean allowImages = false;
     /** Optional explicit response contract; zero/blank disables a constraint. */
     public int exactListItems = 0;
     public int maxBulletPoints = 0;
