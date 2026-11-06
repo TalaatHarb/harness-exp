@@ -47,7 +47,8 @@ public class JsoupContentExtractor implements ContentExtractor {
 
         doc.select(NOISE).remove();
         try {
-            doc.select(NOISE_CLASSES).remove();
+            // Page-wide feature flags can contain "menu"/"sidebar" without being boilerplate containers.
+            doc.select(NOISE_CLASSES).not("html, body").remove();
         } catch (RuntimeException e) {
             // unsupported selector in a particular jsoup version: fall back to tag-based cleaning only
         }

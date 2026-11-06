@@ -37,18 +37,28 @@ public class RunNativeShellTool implements Tool {
     static List<String> shellCommand(String command) {
         if (ProcessRunner.isWindows()) {
             String shell = ProcessRunner.onPath("pwsh") ? "pwsh" : "powershell";
-            return List.of(shell, "-NoProfile", "-NonInteractive", "-Command", command);
+            return List.of(shell, "-NoProfile", "-NonInteractive", "-Command",
+                    "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); "
+                    + "$OutputEncoding = [Console]::OutputEncoding; "
+                    + "$ErrorActionPreference = 'Stop'; " + command);
         }
         return List.of(ProcessRunner.onPath("bash") ? "bash" : "sh", "-c", command);
     }
 
     @Override
     public ToolResult execute(Map<String, Object> arguments) throws InterruptedException {
+        if (arguments == null) {
+            return ToolResult.error("Missing required argument 'command'");
+        }
         Object command = arguments.get("command");
         if (!(command instanceof String c) || c.isBlank()) {
             return ToolResult.error("Missing required argument 'command'");
         }
-        return ProcessRunner.run(shellCommand(c), ProcessRunner.workingDirectory(arguments.get("workingDirectory")),
-                ProcessRunner.timeoutSeconds(arguments.get("timeoutSeconds")));
+        try {
+            return ProcessRunner.run(shellCommand(c), ProcessRunner.workingDirectory(arguments.get("workingDirectory")),
+                    ProcessRunner.timeoutSeconds(arguments.get("timeoutSeconds")));
+        } catch (IllegalArgumentException e) {
+            return ToolResult.error("Shell arguments rejected: " + e.getMessage());
+        }
     }
 }

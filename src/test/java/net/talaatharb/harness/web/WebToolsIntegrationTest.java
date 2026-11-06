@@ -142,6 +142,20 @@ class WebToolsIntegrationTest {
                 return "fake";
             }
 
+            @Test
+            void extractToolDoesNotClaimSuccessWhenAllPagesFailOrHaveNoContent() throws Exception {
+                WebSearchExtractTool tool = new WebSearchExtractTool(research());
+                pages.clear();
+                ToolResult failed = tool.execute(Map.of("query", "q"));
+                assertFalse(failed.success(), failed.output());
+                assertTrue(failed.output().contains("## Search results"));
+                assertTrue(failed.output().contains("Failed:"));
+                pages.put("https://a.example/alpha", "<html><body><p>Short</p></body></html>");
+                ToolResult empty = tool.execute(Map.of("query", "q"));
+                assertFalse(empty.success(), empty.output());
+                assertTrue(empty.output().contains("no readable content"));
+            }
+
             @Override
             public String displayName() {
                 return "Failing";

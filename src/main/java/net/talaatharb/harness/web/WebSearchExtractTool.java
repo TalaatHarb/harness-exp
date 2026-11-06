@@ -97,6 +97,6 @@ public class WebSearchExtractTool implements Tool {
         }
         WebToolArgs.appendProblems(sb, "Skipped", r.skipped());
         WebToolArgs.appendProblems(sb, "Failed", r.failures());
-        return ToolResult.ok(sb.toString().strip());
+        return r.documents().isEmpty() ? ToolResult.error(sb.toString().strip()) : ToolResult.ok(sb.toString().strip());
     }
 }

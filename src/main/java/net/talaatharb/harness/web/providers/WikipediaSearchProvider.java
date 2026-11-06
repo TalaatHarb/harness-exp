@@ -55,14 +55,23 @@ public class WikipediaSearchProvider implements SearchProvider {
 
     static List<SearchResult> parse(String body, String lang, int limit) throws IOException {
         List<SearchResult> out = new ArrayList<>();
-        for (JsonNode n : JSON.readTree(body).path("query").path("search")) {
+        JsonNode response = JSON.readTree(body);
+        if (response == null || !response.path("error").isMissingNode()) {
+            throw new IOException("Wikipedia search failed: " + (response == null ? "empty response"
+                    : response.path("error").path("info").asText("API error")));
+        }
+        if (!response.path("query").path("search").isArray()) {
+            throw new IOException("Wikipedia search returned no search result array");
+        }
+        for (JsonNode n : response.path("query").path("search")) {
             String title = n.path("title").asText("");
             if (title.isBlank()) {
                 continue;
             }
             String url = "https://" + lang + ".wikipedia.org/wiki/" + SearchHttp.encode(title.replace(' ', '_'));
             out.add(new SearchResult(title, url, Jsoup.parse(n.path("snippet").asText("")).text(),
-                    n.path("timestamp").asText(""), ID, Map.of("wordcount", n.path("wordcount").asText("0"))));
+                    "", ID, Map.of("wordcount", n.path("wordcount").asText("0"),
+                            "modifiedDate", n.path("timestamp").asText(""))));
             if (out.size() >= limit) {
                 break;
             }

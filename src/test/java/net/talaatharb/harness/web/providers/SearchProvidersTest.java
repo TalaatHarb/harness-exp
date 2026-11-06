@@ -55,7 +55,11 @@ class SearchProvidersTest {
         assertEquals(1, r.size());
         assertEquals("https://en.wikipedia.org/wiki/Java_%28programming_language%29", r.get(0).url());
         assertEquals("a Java language", r.get(0).snippet());
-        assertEquals("2025-01-01T00:00:00Z", r.get(0).publishedDate());
+        assertEquals("", r.get(0).publishedDate(), "search timestamp is a modification date, not publication");
+        assertEquals("2025-01-01T00:00:00Z", r.get(0).metadata().get("modifiedDate"));
+        assertThrows(IOException.class, () -> WikipediaSearchProvider.parse(
+                "{\"error\":{\"code\":\"ratelimited\",\"info\":\"Too many requests\"}}", "en", 5));
+        assertThrows(IOException.class, () -> WikipediaSearchProvider.parse("{}", "en", 5));
     }
 
     @Test

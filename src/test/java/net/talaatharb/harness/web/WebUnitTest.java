@@ -67,6 +67,18 @@ class WebUnitTest {
     }
 
     @Test
+    void wikipediaPageWideFeatureFlagsDoNotDeleteTheArticle() {
+        String text = "The Pythagorean theorem describes the sides of a right triangle. ".repeat(6);
+        String html = "<html class='vector-feature-main-menu-pinned-disabled'>"
+                + "<body class='sidebar-disabled'><div class='sidebar'><p>Noise to remove from the page.</p></div>"
+                + "<main><h1>Pythagorean theorem</h1><p>" + text + "</p></main></body></html>";
+        ExtractedDocument extracted = new JsoupContentExtractor().extract("https://en.wikipedia.org/wiki/Test",
+                html, 2500);
+        assertTrue(extracted.content().contains(text.strip()), extracted.content());
+        assertFalse(extracted.content().contains("Noise"));
+    }
+
+    @Test
     void urlNormalizationIgnoresTrackingAndCosmetics() {
         String a = DocumentDeduplicator.normalizeUrl("http://www.Example.com/path/?utm_source=x&b=2&a=1#frag");
         String b = DocumentDeduplicator.normalizeUrl("https://example.com:443/path?a=1&b=2");

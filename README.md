@@ -172,6 +172,8 @@ so it can retry (bounded by the iteration limit).
 | `ask_user_for_decision` | safe | Opens a window with a `question`, optional `options` and optional `inputLabel`. Exactly two options without input show two large buttons; no options shows only the labelled input; anything else shows a radio list with the optional input |
 
 Dangerous tools need approval on every call and run **without a sandbox**; timeouts kill the process tree.
+PowerShell output is UTF-8 and runs with `$ErrorActionPreference = 'Stop'`, so a cmdlet error cannot be
+hidden by a later successful command. Invalid timeout or working-directory argument types return errors.
 
 ## Dynamic tools (agent-built, sensitive)
 
@@ -379,6 +381,8 @@ and page-extraction pipeline in package `web`:
 
 Page text is untrusted: the output tells the model to treat it as source data, not instructions. The default tool
 output cap (**Max tool output**, 8000 chars) also applies to `web_search_extract`; raise it if you raise the web limits.
+If search finds results but no page can be extracted, the tool returns an error with the available result list
+and failure/skip reasons rather than claiming successful extraction.
 
 **Configuration** (Harness → Tools & MCP → *Web search*, stored as `tools.web` in `settings.json`):
 
@@ -388,6 +392,8 @@ output cap (**Max tool output**, 8000 chars) also applies to `web_search_extract
   - `searxng`: a self-hosted [SearXNG](https://docs.searxng.org/) instance. Set its **SearXNG URL** (default
     `http://localhost:8080`) and enable `json` under `search.formats` in its `settings.yml`.
   - `wikipedia`: the official MediaWiki API (no key); set the language code. Only searches Wikipedia.
+    Search-result revision timestamps are modification dates, not publication dates, and are not labelled
+    as "Published" in the output.
 - **Limits**: results requested, pages read per call (`maxPages`, 1-10), fetch timeout, max page size, characters per
   page and per call (`web_search_extract`); `maxIndexCharsPerPage` (default 60000, settings file only) applies to
   `web_search_index`. Also in the settings file: `searchTimeoutSeconds`, `minContentChars`, `minHostDelayMillis`,
@@ -638,7 +644,12 @@ non-negative temperatures and signed 32-bit seeds; OpenAI supports temperature 0
 selected endpoint/model allows them. Anthropic supports temperature 0..1 and rejects a configured seed explicitly.
 Provider restrictions still apply; a seed is not a reproducibility guarantee.
 
-The `calculate` tool offers bounded arithmetic and exact primality checking; it does not execute source code.
+The `calculate` tool accepts `{"expression":"(2 + 3) * 4.5"}` with decimals, parentheses, unary signs and
+`+`, `-`, `*`, `/`, `%` (remainder), using standard precedence. It removes every other character before
+evaluation: `1a2` becomes `12`, and `$1,234.50` becomes `1234.50`. Functions, powers and scientific notation
+are not supported. Invalid expressions and division by zero return explicit errors; input length, nesting
+and numeric size are bounded. Division uses 34 significant digits. Its existing arithmetic operations and
+exact primality checking remain available; it does not execute source code.
 Having a tool available does not guarantee a model will use it. Ground factual answers with trusted RAG documents
 or an appropriately configured MCP tool rather than expecting prompt instructions to cure hallucinations.
 

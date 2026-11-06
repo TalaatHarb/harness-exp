@@ -59,18 +59,88 @@ class SystemToolsTest {
 
     @Test
     void longRunningCommandsAreKilledAtTheTimeout() throws Exception {
-        Assumptions.assumeFalse(ProcessRunner.isWindows());
-        ToolResult result = new RunNativeShellTool().execute(Map.of("command", "sleep 30", "timeoutSeconds", 1));
+        ToolResult result = new RunNativeShellTool().execute(Map.of("command",
+                ProcessRunner.isWindows() ? "Start-Sleep 30" : "sleep 30", "timeoutSeconds", 1));
         assertFalse(result.success());
         assertTrue(result.output().contains("Timed out"));
     }
 
     @Test
     void outputIsCapped() throws Exception {
-        Assumptions.assumeFalse(ProcessRunner.isWindows());
-        ToolResult result = new RunNativeShellTool().execute(Map.of("command", "head -c 100000 /dev/zero | tr '\\0' x"));
+        ToolResult result = new RunNativeShellTool().execute(Map.of("command", ProcessRunner.isWindows()
+                ? "Write-Output ('x' * 100000)" : "head -c 100000 /dev/zero | tr '\\0' x"));
+        assertTrue(result.success(), result.output());
         assertTrue(result.output().contains("[output truncated]"));
         assertTrue(result.output().length() < 21_000);
+    }
+
+    @Test
+    void shellPreservesUnicodeAndReportsPowerShellErrors() throws Exception {
+        String expected = "h\u00e9llo \u4e16\u754c";
+        RunNativeShellTool shell = new RunNativeShellTool();
+        ToolResult unicode = shell.execute(Map.of("command", ProcessRunner.isWindows()
+                ? "Write-Output '" + expected + "'" : "printf '" + expected + "'"));
+        assertTrue(unicode.success(), unicode.output());
+        assertTrue(unicode.output().contains(expected), unicode.output());
+        if (ProcessRunner.isWindows()) {
+            ToolResult error = shell.execute(Map.of("command", "Write-Error 'failure'; Write-Output 'not reached'"));
+            assertFalse(error.success(), error.output());
+            assertFalse(error.output().contains("not reached"), error.output());
+        }
+    }
+
+    @Test
+    void shellUsesTheRequestedWorkingDirectory() throws Exception {
+        Files.writeString(temp.resolve("input.txt"), "working directory verified");
+        ToolResult result = new RunNativeShellTool().execute(Map.of("command",
+                ProcessRunner.isWindows() ? "Get-Content input.txt" : "cat input.txt",
+                "workingDirectory", temp.toString()));
+        assertTrue(result.success(), result.output());
+        assertTrue(result.output().contains("working directory verified"), result.output());
+    }
+
+    @Test
+    void executionArgumentsAreValidated() throws Exception {
+        RunNativeShellTool shell = new RunNativeShellTool();
+        RunPythonCodeTool python = new RunPythonCodeTool();
+        assertFalse(shell.execute(null).success());
+        assertFalse(python.execute(null).success());
+        for (Object timeout : List.of("oops", "NaN", "Infinity")) {
+            assertFalse(shell.execute(Map.of("command", "echo hi", "timeoutSeconds", timeout)).success());
+            assertFalse(python.execute(Map.of("code", "print(42)", "timeoutSeconds", timeout)).success());
+        }
+        assertFalse(shell.execute(Map.of("command", "echo hi", "workingDirectory", 42)).success());
+        assertFalse(python.execute(Map.of("code", "print(42)", "workingDirectory", 42)).success());
+        assertFalse(shell.execute(Map.of("command", "echo hi",
+                "workingDirectory", temp.resolve("missing").toString())).success());
+        assertEquals(60, ProcessRunner.timeoutSeconds(null));
+        assertEquals(600, ProcessRunner.timeoutSeconds("1e20"));
+    }
+
+    @Test
+    void pythonPreservesUnicodeWorkingDirectoryAndStderrAndEnforcesBounds() throws Exception {
+        Assumptions.assumeTrue(RunPythonCodeTool.interpreter() != null, "No Python available");
+        RunPythonCodeTool python = new RunPythonCodeTool();
+        String expected = "h\u00e9llo \u4e16\u754c";
+        Files.writeString(temp.resolve("input.txt"), expected);
+        ToolResult result = python.execute(Map.of("code",
+                "from pathlib import Path\nimport sys\n"
+                + "print(Path('input.txt').read_text(encoding='utf-8'))\n"
+                + "print('stderr test', file=sys.stderr)\nprint(input())", "workingDirectory", temp.toString()));
+        assertFalse(result.success(), "stdin is closed and input() must fail");
+        assertTrue(result.output().contains(expected), result.output());
+        assertTrue(result.output().contains("stderr test"), result.output());
+        assertTrue(result.output().contains("EOFError"), result.output());
+
+        ToolResult timeout = python.execute(Map.of("code",
+                "import time\nprint('partial', flush=True)\ntime.sleep(30)", "timeoutSeconds", 1));
+        assertFalse(timeout.success());
+        assertTrue(timeout.output().contains("Timed out"), timeout.output());
+        assertTrue(timeout.output().contains("partial"), timeout.output());
+        ToolResult capped = python.execute(Map.of("code", "print('x'*100000)"));
+        assertTrue(capped.success(), capped.output());
+        assertTrue(capped.output().contains("[output truncated]"));
+        assertTrue(capped.output().length() < 21_000);
     }
 
     @Test

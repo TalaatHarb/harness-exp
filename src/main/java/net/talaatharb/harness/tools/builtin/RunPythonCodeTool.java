@@ -52,12 +52,23 @@ public class RunPythonCodeTool implements Tool {
 
     @Override
     public ToolResult execute(Map<String, Object> arguments) throws IOException, InterruptedException {
+        if (arguments == null) {
+            return ToolResult.error("Missing required argument 'code'");
+        }
         Object code = arguments.get("code");
         if (!(code instanceof String source) || source.isBlank()) {
             return ToolResult.error("Missing required argument 'code'");
         }
         if (source.length() > MAX_CODE_CHARS) {
             return ToolResult.error("Code is too large (max " + MAX_CODE_CHARS + " characters)");
+        }
+        Path workingDir;
+        int timeout;
+        try {
+            workingDir = ProcessRunner.workingDirectory(arguments.get("workingDirectory"));
+            timeout = ProcessRunner.timeoutSeconds(arguments.get("timeoutSeconds"));
+        } catch (IllegalArgumentException e) {
+            return ToolResult.error("Python arguments rejected: " + e.getMessage());
         }
         List<String> python = interpreter();
         if (python == null) {
@@ -70,8 +81,7 @@ public class RunPythonCodeTool implements Tool {
             command.add("-X");
             command.add("utf8");
             command.add(script.toString());
-            return ProcessRunner.run(command, ProcessRunner.workingDirectory(arguments.get("workingDirectory")),
-                    ProcessRunner.timeoutSeconds(arguments.get("timeoutSeconds")));
+            return ProcessRunner.run(command, workingDir, timeout);
         } finally {
             Files.deleteIfExists(script);
         }

@@ -25,16 +25,25 @@ final class ProcessRunner {
             return DEFAULT_TIMEOUT_SECONDS;
         }
         try {
-            int value = (int) Math.round(Double.parseDouble(raw.toString()));
-            return Math.max(1, Math.min(MAX_TIMEOUT_SECONDS, value));
+            double value = Double.parseDouble(raw.toString());
+            if (!Double.isFinite(value)) {
+                throw new IllegalArgumentException("timeoutSeconds must be a finite number");
+            }
+            return (int) Math.max(1, Math.min(MAX_TIMEOUT_SECONDS, Math.round(value)));
         } catch (NumberFormatException e) {
-            return DEFAULT_TIMEOUT_SECONDS;
+            throw new IllegalArgumentException("timeoutSeconds must be a number", e);
         }
     }
 
     /** Resolves an optional working directory argument; {@code null} means the current one. */
     static Path workingDirectory(Object raw) {
-        if (!(raw instanceof String s) || s.isBlank()) {
+        if (raw == null) {
+            return null;
+        }
+        if (!(raw instanceof String s)) {
+            throw new IllegalArgumentException("workingDirectory must be a string");
+        }
+        if (s.isBlank()) {
             return null;
         }
         return Path.of(s).toAbsolutePath().normalize();
