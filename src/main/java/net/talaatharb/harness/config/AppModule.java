@@ -92,6 +92,18 @@ public class AppModule extends AbstractModule {
         tools.addBinding().to(RecallTool.class);
         tools.addBinding().to(RagSearchTool.class);
         tools.addBinding().to(RagIngestTool.class);
+        tools.addBinding().to(net.talaatharb.harness.web.WebSearchExtractTool.class);
+        tools.addBinding().to(net.talaatharb.harness.web.WebSearchIndexTool.class);
+
+        // Add a provider here (and nowhere else) to make it selectable in Tools settings.
+        Multibinder<net.talaatharb.harness.web.SearchProvider> searchProviders =
+                Multibinder.newSetBinder(binder(), net.talaatharb.harness.web.SearchProvider.class);
+        searchProviders.addBinding().to(net.talaatharb.harness.web.providers.DuckDuckGoSearchProvider.class);
+        searchProviders.addBinding().to(net.talaatharb.harness.web.providers.SearxngSearchProvider.class);
+        searchProviders.addBinding().to(net.talaatharb.harness.web.providers.WikipediaSearchProvider.class);
+        bind(net.talaatharb.harness.web.PageFetcher.class).to(net.talaatharb.harness.web.HttpPageFetcher.class);
+        bind(net.talaatharb.harness.web.ContentExtractor.class)
+                .to(net.talaatharb.harness.web.JsoupContentExtractor.class);
         bind(McpToolSource.class).to(McpClientManager.class);
 
         Multibinder<Guardrail> guardrails = Multibinder.newSetBinder(binder(), Guardrail.class);

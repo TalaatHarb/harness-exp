@@ -50,7 +50,7 @@ separate **⚙ Harness** settings window, one tab per harness concern.
 | Memory | Long-term memories: backend (Markdown folder or MapDB), context/recall limits, direct explicit writes; list / search / add / edit / delete memories and copy them to the other backend. See [Memory](#memory) | `memory` |
 | RAG | Per-conversation documents: automatic context on/off, embedder (Ollama embedding model or built-in offline) with a **Test** button, chunk size/overlap, passages in context, search limits, min similarity, max file size. See [RAG](#rag-documents) | `rag` |
 | Context builder | Ordered `ContextContributor` pipeline (toggleable), history window, conversation compaction, pinned context, attachment limits; the preview shows estimated tokens per contributor | `context` |
-| Tools + MCP | Built-in tools, enable/disable, output cap, MCP servers (stdio / streamable HTTP) with live status, test, reconnect and `mcp.json` import | `tools` |
+| Tools + MCP | Built-in tools, enable/disable, output cap, web search provider and limits, MCP servers (stdio / streamable HTTP) with live status, test, reconnect and `mcp.json` import | `tools` |
 | Agent loop | Iteration/tool-call/duration/repeat/error limits (clamped by hard ceilings in `AgentLoopLimits`) and `HookPoint`s | `agent` |
 | Guardrails | Input/tool-call/output guardrails: length limit, blocked terms, secret redaction | `guardrails` |
 | Human approval | Never / risky tools / all tools, always-allowed list, timeout (denies and closes the dialog). Tools that run agent-written code (`create_tool`, dynamic tools) or rewrite its instructions (`create_skill`) and `DANGEROUS` tools need approval on **every** call, whatever the policy, and can't be "always allowed" | `approval` |
@@ -366,6 +366,47 @@ conversation no longer exists. A new chat that only has documents is saved as so
 
 The chunk text is also indexed for keyword search. Possible improvements later: hybrid keyword and vector search,
 re-ranking, and harness-wide collections.
+
+## Web research tools
+
+Two sensitive tools (they make outbound requests, so they ask for approval under the default policy) share one search
+and page-extraction pipeline in package `web`:
+
+| Tool | Arguments | What it does |
+|---|---|---|
+| `web_search_extract` | `query`, optional `maxPages` | Searches with the configured provider, fetches the best pages, and returns the result list (title, URL, snippet, date) plus readable page text with source URL, title and publication date. Nothing is stored. |
+| `web_search_index` | `query`, optional `maxPages` | Same search and extraction, then adds each page to the **conversation's RAG documents** with `RagService.ingestText` (RAG's own chunking, embedding, redaction and persistence). The document name is the page title and its source is the URL; the publication date is kept as a header line in the text. Returns a summary of indexed, skipped (already indexed or duplicate) and failed pages. Read the content with `rag_search`. |
+
+Page text is untrusted: the output tells the model to treat it as source data, not instructions. The default tool
+output cap (**Max tool output**, 8000 chars) also applies to `web_search_extract`; raise it if you raise the web limits.
+
+**Configuration** (Harness → Tools & MCP → *Web search*, stored as `tools.web` in `settings.json`):
+
+- **Provider**: one choice for both tools. Only free providers are implemented:
+  - `duckduckgo` (default): the key-less HTML endpoint. It is unofficial; when it answers with a rate limit or bot
+    challenge the search fails with a message and is not retried or evaded.
+  - `searxng`: a self-hosted [SearXNG](https://docs.searxng.org/) instance. Set its **SearXNG URL** (default
+    `http://localhost:8080`) and enable `json` under `search.formats` in its `settings.yml`.
+  - `wikipedia`: the official MediaWiki API (no key); set the language code. Only searches Wikipedia.
+- **Limits**: results requested, pages read per call (`maxPages`, 1-10), fetch timeout, max page size, characters per
+  page and per call (`web_search_extract`); `maxIndexCharsPerPage` (default 60000, settings file only) applies to
+  `web_search_index`. Also in the settings file: `searchTimeoutSeconds`, `minContentChars`, `minHostDelayMillis`,
+  `userAgent` and `allowPrivateHosts`.
+
+**Good web citizenship**: pages are fetched with an identifying `User-Agent`, robots.txt is obeyed (an unreachable
+robots.txt means "do not fetch"; it can be switched off in the UI), requests to the same host are spaced out, hosts on
+private/loopback addresses are refused unless `allowPrivateHosts` is set, and 401/403/429/451 responses,
+CAPTCHA/bot-challenge pages and non-HTML content are skipped and reported, never worked around.
+
+**Extraction**: JSoup removes scripts, navigation, footers, forms, cookie/ad/sidebar blocks, then takes the
+`article`/`main` element (or the densest text block) and keeps headings, paragraphs, lists, quotes and code. Very short
+lines and repeated lines are dropped. Pages are de-duplicated by normalized URL (tracking parameters, `www.`, fragments
+ignored) and by near-identical text; `web_search_index` also skips URLs already indexed in the conversation and pages
+whose text matches an indexed one.
+
+**Adding a provider**: implement `SearchProvider` (`id`, `displayName`, optional `configFields` for provider-specific
+settings such as a URL, and `search`), and add one `searchProviders.addBinding()` line in `AppModule`. The settings UI
+lists it and builds its fields automatically; neither tool changes.
 
 ## MCP servers
 

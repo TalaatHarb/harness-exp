@@ -37,6 +37,32 @@
         <Button text="Delete selected" onAction="#onDeleteDynamicTool"/>
         <Label fx:id="dynamicStatusLabel" wrapText="true" styleClass="section-help" HBox.hgrow="ALWAYS"/>
     </HBox>
+    <Label text="Web search" styleClass="section-title"/>
+    <Label wrapText="true" styleClass="section-help"
+           text="Used by web_search_extract (returns page text to the agent) and web_search_index (adds pages to the knowledge base). Only free providers are offered; the same provider serves both tools. Pages are fetched politely: robots.txt is honoured and blocked or rate-limited sites are skipped."/>
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Label text="Provider"/>
+        <ComboBox fx:id="searchProviderCombo" prefWidth="240"/>
+        <Label fx:id="searchProviderHelp" wrapText="true" styleClass="section-help" HBox.hgrow="ALWAYS"/>
+    </HBox>
+    <VBox fx:id="searchProviderConfigBox" spacing="6"/>
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Label text="Results"/>
+        <Spinner fx:id="webMaxResultsSpinner" editable="true" prefWidth="70"/>
+        <Label text="Pages to read"/>
+        <Spinner fx:id="webMaxPagesSpinner" editable="true" prefWidth="70"/>
+        <Label text="Fetch timeout (s)"/>
+        <Spinner fx:id="webFetchTimeoutSpinner" editable="true" prefWidth="80"/>
+        <CheckBox fx:id="webRobotsCheck" text="Respect robots.txt"/>
+    </HBox>
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Label text="Chars per page"/>
+        <Spinner fx:id="webCharsPerPageSpinner" editable="true" prefWidth="90"/>
+        <Label text="Chars per call"/>
+        <Spinner fx:id="webTotalCharsSpinner" editable="true" prefWidth="90"/>
+        <Label text="Max page size (KB)"/>
+        <Spinner fx:id="webMaxKbSpinner" editable="true" prefWidth="90"/>
+    </HBox>
     <Label text="MCP servers" styleClass="section-title"/>
     <Label wrapText="true" styleClass="section-help"
            text="Model Context Protocol servers: stdio (a command the harness starts, e.g. npx -y @modelcontextprotocol/server-filesystem C:\work) or streamable HTTP (a URL). Their tools appear in the table above once connected. Env (stdio) / headers (HTTP) take KEY=VALUE; KEY2=VALUE2 — use ${VAR} to read a secret from the environment instead of storing it."/>

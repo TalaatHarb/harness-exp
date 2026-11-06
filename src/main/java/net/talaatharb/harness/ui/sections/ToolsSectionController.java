@@ -36,6 +36,8 @@ import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.cell.CheckBoxTableCell;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.WindowEvent;
 import net.talaatharb.harness.config.HarnessSettings;
@@ -46,12 +48,20 @@ import net.talaatharb.harness.tools.dynamic.DynamicToolSpec;
 import net.talaatharb.harness.tools.mcp.McpClient;
 import net.talaatharb.harness.tools.mcp.McpServerConfig;
 import net.talaatharb.harness.tools.mcp.McpToolSource;
+import net.talaatharb.harness.web.SearchProvider;
+import net.talaatharb.harness.web.SearchProviderRegistry;
+import net.talaatharb.harness.web.WebSearchSettings;
 
 public class ToolsSectionController implements SettingsSection {
     private static final Logger LOG = LoggerFactory.getLogger(ToolsSectionController.class);
     private final ToolRegistry registry;
     private final McpToolSource mcp;
     private final DynamicToolRegistry dynamic;
+    private final SearchProviderRegistry searchProviders;
+    /** provider id -> field key -> value, edited live and written back on apply */
+    private final Map<String, Map<String, String>> providerConfig = new HashMap<>();
+    private final Map<String, TextField> configFields = new HashMap<>();
+    private SearchProvider shownProvider;
     private final ObservableList<ToolRow> tools = FXCollections.observableArrayList();
     private final ObservableList<McpRow> servers = FXCollections.observableArrayList();
 
@@ -82,6 +92,16 @@ public class ToolsSectionController implements SettingsSection {
     @FXML private ComboBox<McpServerConfig.Transport> mcpTransportCombo;
     @FXML private TextField mcpEndpointField;
     @FXML private Label dynamicStatusLabel;
+    @FXML private ComboBox<SearchProvider> searchProviderCombo;
+    @FXML private Label searchProviderHelp;
+    @FXML private VBox searchProviderConfigBox;
+    @FXML private Spinner<Integer> webMaxResultsSpinner;
+    @FXML private Spinner<Integer> webMaxPagesSpinner;
+    @FXML private Spinner<Integer> webFetchTimeoutSpinner;
+    @FXML private Spinner<Integer> webCharsPerPageSpinner;
+    @FXML private Spinner<Integer> webTotalCharsSpinner;
+    @FXML private Spinner<Integer> webMaxKbSpinner;
+    @FXML private CheckBox webRobotsCheck;
 
     static final class ToolRow {
         final Tool tool;
@@ -104,10 +124,12 @@ public class ToolsSectionController implements SettingsSection {
     }
 
     @Inject
-    public ToolsSectionController(ToolRegistry registry, McpToolSource mcp, DynamicToolRegistry dynamic) {
+    public ToolsSectionController(ToolRegistry registry, McpToolSource mcp, DynamicToolRegistry dynamic,
+            SearchProviderRegistry searchProviders) {
         this.registry = registry;
         this.mcp = mcp;
         this.dynamic = dynamic;
+        this.searchProviders = searchProviders;
     }
 
     @FXML
@@ -152,6 +174,20 @@ public class ToolsSectionController implements SettingsSection {
                 });
             }
         });
+
+        searchProviderCombo.setItems(FXCollections.observableArrayList(searchProviders.all()));
+        searchProviderCombo.setConverter(new javafx.util.StringConverter<>() {
+            @Override
+            public String toString(SearchProvider p) {
+                return p == null ? "" : p.displayName();
+            }
+
+            @Override
+            public SearchProvider fromString(String s) {
+                return null;
+            }
+        });
+        searchProviderCombo.valueProperty().addListener((o, old, p) -> showProvider(p));
 
         mcpTransportCombo.setItems(FXCollections.observableArrayList(McpServerConfig.Transport.values()));
         mcpTransportCombo.setValue(McpServerConfig.Transport.STDIO);
@@ -213,9 +249,61 @@ public class ToolsSectionController implements SettingsSection {
         SettingsSection.intSpinner(maxOutputSpinner, 100, 200_000, s.tools.maxToolOutputChars);
         SettingsSection.intSpinner(mcpConnectTimeoutSpinner, 5, 600, s.tools.mcpConnectTimeoutSeconds);
         SettingsSection.intSpinner(mcpToolTimeoutSpinner, 1, 3_600, s.tools.mcpToolTimeoutSeconds);
+        loadWebSettings(s.tools.web == null ? new WebSearchSettings() : s.tools.web);
         tools.setAll(registry.all(s).stream()
                 .map(t -> new ToolRow(t, !s.tools.disabledTools.contains(t.name()))).toList());
         servers.setAll(s.tools.mcpServers.stream().map(c -> new McpRow(c.copy())).toList());
+    }
+
+    private void loadWebSettings(WebSearchSettings web) {
+        providerConfig.clear();
+        web.providerConfig.forEach((id, values) -> providerConfig.put(id, new HashMap<>(values)));
+        SettingsSection.intSpinner(webMaxResultsSpinner, 1, 30, web.maxResults);
+        SettingsSection.intSpinner(webMaxPagesSpinner, 1, 10, web.maxPages);
+        SettingsSection.intSpinner(webFetchTimeoutSpinner, 1, 300, web.fetchTimeoutSeconds);
+        SettingsSection.intSpinner(webCharsPerPageSpinner, 200, 200_000, web.maxCharsPerPage);
+        SettingsSection.intSpinner(webTotalCharsSpinner, 200, 500_000, web.maxTotalChars);
+        SettingsSection.intSpinner(webMaxKbSpinner, 10, 50_000, web.maxResponseBytes / 1024);
+        webRobotsCheck.setSelected(web.respectRobotsTxt);
+        shownProvider = null;
+        SearchProvider selected = searchProviders.find(web.provider).orElse(null);
+        if (selected == null && !searchProviders.all().isEmpty()) {
+            selected = searchProviders.find(WebSearchSettings.DEFAULT_PROVIDER)
+                    .orElse(searchProviders.all().get(0));
+        }
+        searchProviderCombo.setValue(null);
+        searchProviderCombo.setValue(selected);
+    }
+
+    /** Rebuilds the provider-specific fields; values typed for the previous provider are kept in memory. */
+    private void showProvider(SearchProvider provider) {
+        captureProviderFields();
+        searchProviderConfigBox.getChildren().clear();
+        configFields.clear();
+        shownProvider = provider;
+        if (provider == null) {
+            searchProviderHelp.setText("");
+            return;
+        }
+        searchProviderHelp.setText(provider.description());
+        Map<String, String> values = providerConfig.getOrDefault(provider.id(), Map.of());
+        for (SearchProvider.ConfigField f : provider.configFields()) {
+            TextField field = new TextField(values.getOrDefault(f.key(), f.defaultValue()));
+            field.setPromptText(f.help());
+            HBox.setHgrow(field, javafx.scene.layout.Priority.ALWAYS);
+            configFields.put(f.key(), field);
+            Label label = new Label(f.label());
+            label.setMinWidth(120);
+            searchProviderConfigBox.getChildren().add(new HBox(8, label, field));
+        }
+    }
+
+    private void captureProviderFields() {
+        if (shownProvider != null && !configFields.isEmpty()) {
+            Map<String, String> values = new HashMap<>();
+            configFields.forEach((k, f) -> values.put(k, f.getText().strip()));
+            providerConfig.put(shownProvider.id(), values);
+        }
     }
 
     /** A server connected, failed or changed its tools: refresh statuses and the tool list (keeping checkboxes). */
@@ -236,6 +324,7 @@ public class ToolsSectionController implements SettingsSection {
         s.tools.maxToolOutputChars = SettingsSection.spinnerValue(maxOutputSpinner);
         s.tools.mcpConnectTimeoutSeconds = SettingsSection.spinnerValue(mcpConnectTimeoutSpinner);
         s.tools.mcpToolTimeoutSeconds = SettingsSection.spinnerValue(mcpToolTimeoutSpinner);
+        applyWebSettings(s);
         s.tools.disabledTools.clear();
         tools.stream().filter(r -> !r.enabled.get()).forEach(r -> s.tools.disabledTools.add(r.tool.name()));
         List<McpServerConfig> configs = new ArrayList<>();
@@ -244,6 +333,25 @@ public class ToolsSectionController implements SettingsSection {
             configs.add(new McpServerConfig(c.name, c.transport, c.command, c.url, row.enabled.get(), c.env));
         }
         s.tools.mcpServers = configs;
+    }
+
+    private void applyWebSettings(HarnessSettings s) {
+        captureProviderFields();
+        WebSearchSettings web = s.tools.web == null ? new WebSearchSettings() : s.tools.web;
+        SearchProvider selected = searchProviderCombo.getValue();
+        if (selected != null) {
+            web.provider = selected.id();
+        }
+        web.providerConfig = new HashMap<>();
+        providerConfig.forEach((id, values) -> web.providerConfig.put(id, new HashMap<>(values)));
+        web.maxResults = SettingsSection.spinnerValue(webMaxResultsSpinner);
+        web.maxPages = SettingsSection.spinnerValue(webMaxPagesSpinner);
+        web.fetchTimeoutSeconds = SettingsSection.spinnerValue(webFetchTimeoutSpinner);
+        web.maxCharsPerPage = SettingsSection.spinnerValue(webCharsPerPageSpinner);
+        web.maxTotalChars = SettingsSection.spinnerValue(webTotalCharsSpinner);
+        web.maxResponseBytes = SettingsSection.spinnerValue(webMaxKbSpinner) * 1024;
+        web.respectRobotsTxt = webRobotsCheck.isSelected();
+        s.tools.web = web;
     }
 
     /** The server described by the input fields, or {@code null} (with a message) when incomplete. */
