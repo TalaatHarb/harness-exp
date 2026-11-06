@@ -162,6 +162,17 @@ MCP servers are connected by `tools/mcp/McpClientManager` (see [MCP servers](#mc
 Malformed `tool_call` blocks are not shown as answers; the loop sends the parse problem back to the model
 so it can retry (bounded by the iteration limit).
 
+## System tools
+
+| Tool | Risk | What it does |
+|---|---|---|
+| `write_file` | sensitive | Writes (or appends with `append: true`) UTF-8 `content` to `path`, creating parent folders. Up to 1,000,000 characters |
+| `run_native_shell` | dangerous | Runs `command` in PowerShell (Windows) or bash/sh (elsewhere), optional `workingDirectory` and `timeoutSeconds` (default 60, max 600). Returns exit code and combined output (20KB cap) |
+| `run_python_code` | dangerous | Runs `code` with `python3`/`python`/`py`; same options and limits as the shell tool |
+| `ask_user_for_decision` | safe | Opens a window with a `question`, optional `options` and optional `inputLabel`. Exactly two options without input show two large buttons; no options shows only the labelled input; anything else shows a radio list with the optional input |
+
+Dangerous tools need approval on every call and run **without a sandbox**; timeouts kill the process tree.
+
 ## Dynamic tools (agent-built, sensitive)
 
 The agent can write its own tools with the built-in `create_tool` tool (`tools/dynamic`):

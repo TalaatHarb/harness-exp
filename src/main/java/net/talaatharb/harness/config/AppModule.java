@@ -82,6 +82,10 @@ public class AppModule extends AbstractModule {
         tools.addBinding().to(CurrentTimeTool.class);
         tools.addBinding().to(net.talaatharb.harness.tools.builtin.CalculateTool.class);
         tools.addBinding().to(ReadFileTool.class);
+        tools.addBinding().to(net.talaatharb.harness.tools.builtin.WriteFileTool.class);
+        tools.addBinding().to(net.talaatharb.harness.tools.builtin.RunNativeShellTool.class);
+        tools.addBinding().to(net.talaatharb.harness.tools.builtin.RunPythonCodeTool.class);
+        tools.addBinding().to(net.talaatharb.harness.tools.builtin.AskUserForDecisionTool.class);
         tools.addBinding().to(CreateToolTool.class);
         tools.addBinding().to(CreateSkillTool.class);
         tools.addBinding().to(RememberTool.class);
@@ -112,6 +116,13 @@ public class AppModule extends AbstractModule {
         bind(SpeechToText.class).to(WhistleSpeechToText.class);
 
         bindApprovalGateway();
+        bindUserPrompter();
+    }
+
+    /** Overridable so headless tests can answer questions without a window. */
+    protected void bindUserPrompter() {
+        bind(net.talaatharb.harness.interaction.UserPrompter.class)
+                .to(net.talaatharb.harness.ui.DialogUserPrompter.class);
     }
 
     /** Data locations from the settings' {@code storage} block, fixed for this run (changes apply after restart). */

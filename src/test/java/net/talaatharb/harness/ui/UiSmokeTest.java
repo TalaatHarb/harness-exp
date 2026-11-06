@@ -79,6 +79,35 @@ class UiSmokeTest {
     }
 
     @Test
+    void decisionWindowHasDistinctLayouts() throws Exception {
+        fx(() -> {
+            var answers = new ArrayList<net.talaatharb.harness.interaction.DecisionResponse>();
+            Parent binary = DecisionView.build(new net.talaatharb.harness.interaction.DecisionRequest(
+                    "Proceed?", List.of("Yes", "No"), null), answers::add);
+            assertNotNull(binary.lookup("#decisionBinary"));
+            assertNull(binary.lookup("#decisionInput"));
+            ((Button) binary.lookup("#decisionOption1")).fire();
+            assertEquals("No", answers.get(0).choice());
+
+            Parent input = DecisionView.build(new net.talaatharb.harness.interaction.DecisionRequest(
+                    "Name?", List.of(), "Your name"), answers::add);
+            assertNull(input.lookup("#decisionBinary"));
+            ((TextArea) input.lookup("#decisionInput")).setText("Ada");
+            ((Button) input.lookup("#decisionSubmit")).fire();
+            assertEquals("Ada", answers.get(1).input());
+            assertNull(answers.get(1).choice());
+
+            Parent choices = DecisionView.build(new net.talaatharb.harness.interaction.DecisionRequest(
+                    "Which?", List.of("a", "b", "c"), "Note"), answers::add);
+            assertNotNull(choices.lookup("#decisionChoices"));
+            ((TextField) choices.lookup("#decisionInput")).setText("n");
+            ((Button) choices.lookup("#decisionSubmit")).fire();
+            assertEquals("a", answers.get(2).choice());
+            assertEquals("n", answers.get(2).input());
+        });
+    }
+
+    @Test
     void allSettingsSectionsLoadAndNewControlsApply() throws Exception {
         var injector = com.google.inject.Guice.createInjector(
                 new net.talaatharb.harness.config.AppModule(temp.resolve("settings.json")));
