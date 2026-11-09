@@ -5,7 +5,8 @@ import java.util.Map;
 public record ToolCall(String name, Map<String, Object> arguments) {
 
     public ToolCall {
-        arguments = arguments == null ? Map.of() : Map.copyOf(arguments);
+        arguments = arguments == null ? Map.of()
+                : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(arguments));
     }
 
     /** Stable signature used to detect the agent repeating the exact same call. */

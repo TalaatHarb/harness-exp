@@ -15,6 +15,7 @@ import net.talaatharb.harness.interaction.DecisionRequest;
 import net.talaatharb.harness.interaction.DecisionResponse;
 import net.talaatharb.harness.interaction.UserPrompter;
 import net.talaatharb.harness.tools.Tool;
+import net.talaatharb.harness.tools.ToolArguments;
 import net.talaatharb.harness.tools.ToolResult;
 
 /** Asks the user to choose between options and/or type an answer in a dedicated window. Safe: it changes nothing. */
@@ -50,18 +51,24 @@ public class AskUserForDecisionTool implements Tool {
 
     @Override
     public ToolResult execute(Map<String, Object> arguments) throws InterruptedException {
-        Object q = arguments.get("question");
+        Object q = arguments == null ? null : arguments.get("question");
         if (!(q instanceof String question) || question.isBlank()) {
             return ToolResult.error("Missing required argument 'question'");
         }
         List<String> options = new ArrayList<>();
         Object rawOptions = arguments.get("options");
-        if (rawOptions != null) {
+        if (!ToolArguments.omitted(rawOptions)) {
             if (!(rawOptions instanceof List<?> list)) {
                 return ToolResult.error("'options' must be an array of strings");
             }
             for (Object o : list) {
-                String s = o == null ? "" : o.toString().strip();
+                if (o == null) {
+                    continue;
+                }
+                if (!(o instanceof String)) {
+                    return ToolResult.error("'options' must contain strings");
+                }
+                String s = ((String) o).strip();
                 if (!s.isEmpty() && !options.contains(s)) {
                     options.add(s);
                 }
@@ -71,7 +78,10 @@ public class AskUserForDecisionTool implements Tool {
             return ToolResult.error("At most " + MAX_OPTIONS + " options are supported");
         }
         Object rawLabel = arguments.get("inputLabel");
-        String label = rawLabel instanceof String s && !s.isBlank() ? s.strip() : null;
+        if (!ToolArguments.omitted(rawLabel) && !(rawLabel instanceof String)) {
+            return ToolResult.error("'inputLabel' must be a string");
+        }
+        String label = ToolArguments.omitted(rawLabel) ? null : ((String) rawLabel).strip();
         if (options.isEmpty() && label == null) {
             label = "Your answer";
         }

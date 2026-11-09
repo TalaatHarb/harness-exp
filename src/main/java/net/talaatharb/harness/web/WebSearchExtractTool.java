@@ -46,14 +46,21 @@ public class WebSearchExtractTool implements Tool {
     @Override
     public ToolResult execute(Map<String, Object> arguments) throws Exception {
         Map<String, Object> args = arguments == null ? Map.of() : arguments;
-        String query = WebToolArgs.query(args);
+        String query;
+        int pages;
+        WebSearchSettings web = research.settings();
+        try {
+            query = WebToolArgs.query(args);
+            pages = WebToolArgs.maxPages(args, web.maxPages);
+        } catch (IllegalArgumentException e) {
+            return ToolResult.error(e.getMessage());
+        }
         if (query.isEmpty()) {
             return ToolResult.error("Give a non-empty 'query'.");
         }
-        WebSearchSettings web = research.settings();
         WebResearchService.Research r;
         try {
-            r = research.research(query, WebToolArgs.maxPages(args, web.maxPages), web.maxCharsPerPage, null);
+            r = research.research(query, pages, web.maxCharsPerPage, null);
         } catch (IOException e) {
             return ToolResult.error("Web search failed: " + e.getMessage());
         }

@@ -8,6 +8,19 @@ import org.junit.jupiter.api.Test;
 class ToolCallParserTest {
 
     @Test
+    void preservesExplicitNullsAndLiteralContentInImmutableArguments() {
+        ToolCall call = ToolCallParser.parse("{\"name\":\"http_request\",\"arguments\":"
+                + "{\"body\":null,\"headers\":{\"Accept\":null},\"method\":\"default\"}}").orElseThrow();
+        assertTrue(call.arguments().containsKey("body"));
+        org.junit.jupiter.api.Assertions.assertNull(call.arguments().get("body"));
+        assertEquals("default", call.arguments().get("method"));
+        org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
+                () -> call.arguments().put("method", "POST"));
+        assertTrue(ToolCallParser.diagnose("```tool_call\n{\"name\":\"x\",\"arguments\":{\"v\":null}}\n```").isEmpty());
+        assertTrue(ToolCallParser.parse("{\"name\":\"x\",\"arguments\":[1,2]}").isEmpty());
+    }
+
+    @Test
     void parsesFencedCall() {
         ToolCall call = ToolCallParser.parse("Sure.\n```tool_call\n{\"name\":\"read_file\",\"arguments\":{\"path\":\"a.txt\"}}\n```")
                 .orElseThrow();

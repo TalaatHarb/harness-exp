@@ -63,11 +63,18 @@ public class WebSearchIndexTool implements Tool {
         if (conversation == null) {
             return ToolResult.error("No conversation is open.");
         }
-        String query = WebToolArgs.query(args);
+        String query;
+        int pages;
+        WebSearchSettings web = research.settings();
+        try {
+            query = WebToolArgs.query(args);
+            pages = WebToolArgs.maxPages(args, web.maxPages);
+        } catch (IllegalArgumentException e) {
+            return ToolResult.error(e.getMessage());
+        }
         if (query.isEmpty()) {
             return ToolResult.error("Give a non-empty 'query'.");
         }
-        WebSearchSettings web = research.settings();
         Set<String> indexed = new HashSet<>();
         DocumentDeduplicator known = new DocumentDeduplicator();
         for (RagDocument d : rag.documents(conversation)) {
@@ -78,7 +85,7 @@ public class WebSearchIndexTool implements Tool {
         }
         WebResearchService.Research r;
         try {
-            r = research.research(query, WebToolArgs.maxPages(args, web.maxPages), web.maxIndexCharsPerPage,
+            r = research.research(query, pages, web.maxIndexCharsPerPage,
                     url -> indexed.contains(DocumentDeduplicator.normalizeUrl(url)) ? "already indexed" : null);
         } catch (IOException e) {
             return ToolResult.error("Web search failed: " + e.getMessage());

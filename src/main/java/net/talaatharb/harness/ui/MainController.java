@@ -62,6 +62,7 @@ import net.talaatharb.harness.context.ContextSettings;
 import net.talaatharb.harness.history.ConversationRecord;
 import net.talaatharb.harness.history.ConversationStore;
 import net.talaatharb.harness.rag.RagService;
+import net.talaatharb.harness.web.SiteCrawler;
 import net.talaatharb.harness.history.ConversationSummary;
 import net.talaatharb.harness.history.TurnRecord;
 import net.talaatharb.harness.guardrails.SecretRedactionGuardrail;
@@ -110,6 +111,7 @@ public class MainController {
     private AtomicBoolean cancelFlag;
     private final SpeechToText speech;
     private final RagService rag;
+    private final SiteCrawler crawler;
     private VoiceInput voice;
 
     @FXML private ComboBox<String> modelCombo;
@@ -152,9 +154,11 @@ public class MainController {
 
     @Inject
     public MainController(AgentLoop agentLoop, SettingsStore store, ModelProviderRegistry providers,
-            SettingsWindow settingsWindow, ConversationStore history, SpeechToText speech, RagService rag) {
+            SettingsWindow settingsWindow, ConversationStore history, SpeechToText speech, RagService rag,
+            SiteCrawler crawler) {
         this.speech = speech;
         this.rag = rag;
+        this.crawler = crawler;
         this.agentLoop = agentLoop;
         this.store = store;
         this.providers = providers;
@@ -408,7 +412,7 @@ public class MainController {
     @FXML
     private void onKnowledge() {
         ConversationRecord rec = record;
-        new KnowledgeDialog(rag, rec.id, rec.title, history::list).showAndWait(messagesBox.getScene().getWindow());
+        new KnowledgeDialog(rag, crawler, rec.id, rec.title, history::list).showAndWait(messagesBox.getScene().getWindow());
         if (rec == record && rec.turns.isEmpty() && !rag.documents(rec.id).isEmpty()
                 && history.load(rec.id).isEmpty()) {
             // Save the empty chat so its documents survive a restart (orphans are pruned at start-up).

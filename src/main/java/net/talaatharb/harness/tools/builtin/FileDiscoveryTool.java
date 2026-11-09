@@ -20,6 +20,7 @@ import java.util.regex.Pattern;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import net.talaatharb.harness.tools.RiskLevel;
 import net.talaatharb.harness.tools.Tool;
+import net.talaatharb.harness.tools.ToolArguments;
 import net.talaatharb.harness.tools.ToolResult;
 
 /** Read-only discovery beneath an explicitly selected directory; does not follow symbolic links. */

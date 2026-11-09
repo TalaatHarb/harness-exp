@@ -59,7 +59,7 @@ public final class ToolCallParser {
 
     private static ToolCall attachCode(ToolCall call, String reply) {
         Object existing = call.arguments().get(CODE_ARGUMENT);
-        if (existing instanceof String s && !s.isBlank()) {
+        if (!ToolArguments.omitted(existing)) {
             return call;
         }
         Matcher code = CODE_BLOCK.matcher(reply);
@@ -109,9 +109,15 @@ public final class ToolCallParser {
                 return Optional.empty();
             }
             Object args = raw.get("arguments");
+            if (!(args instanceof Map) && !ToolArguments.omitted(args)) {
+                if (explicit) {
+                    LOG.warn("Tool arguments must be a JSON object");
+                }
+                return Optional.empty();
+            }
             @SuppressWarnings("unchecked")
             Map<String, Object> arguments = args instanceof Map ? (Map<String, Object>) args : Map.of();
-            return Optional.of(new ToolCall((String) name, arguments));
+            return Optional.of(new ToolCall(((String) name).strip(), arguments));
         } catch (Exception e) {
             if (explicit) {
                 LOG.warn("Ignoring malformed tool_call block: {}", e.getMessage());

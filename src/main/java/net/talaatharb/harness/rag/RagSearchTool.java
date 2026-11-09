@@ -7,6 +7,7 @@ import com.google.inject.Inject;
 
 import net.talaatharb.harness.agent.ConversationScope;
 import net.talaatharb.harness.tools.Tool;
+import net.talaatharb.harness.tools.ToolArguments;
 import net.talaatharb.harness.tools.ToolResult;
 
 /** Vector search over the current conversation's documents. */
@@ -46,16 +47,14 @@ public class RagSearchTool implements Tool {
         }
         RagSettings settings = rag.settings();
         int max = Math.max(1, settings.maxSearchResults);
-        int limit = max;
-        Object requested = args.get("limit");
-        if (requested != null) {
-            try {
-                limit = Math.max(1, Math.min(max, (int) Double.parseDouble(String.valueOf(requested))));
-            } catch (NumberFormatException e) {
-                return ToolResult.error("limit must be a number");
-            }
+        int limit;
+        String query;
+        try {
+            limit = Math.min(max, ToolArguments.integer(args, "limit", max, Integer.MAX_VALUE));
+            query = ToolArguments.string(args, "query", "").strip();
+        } catch (IllegalArgumentException e) {
+            return ToolResult.error(e.getMessage());
         }
-        String query = args.get("query") == null ? "" : String.valueOf(args.get("query")).strip();
         List<RagDocument> docs = rag.documents(conversation);
         if (docs.isEmpty()) {
             return ToolResult.ok("This conversation has no documents. The user can add files with the 📚 button in "

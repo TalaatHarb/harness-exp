@@ -18,7 +18,7 @@ separate **⚙ Harness** settings window, one tab per harness concern.
   Conversations are stored with [MapDB](https://github.com/jankotek/mapdb) in `~/.harness-exp/history.db`
   (package `history`). Each record is a JSON transcript plus per-turn outcomes, and the file is transactional.
   If the file is locked by another running instance, the app falls back to in-memory history and shows a warning.
-- **📚 Documents (RAG)**: a per-conversation knowledge base for large files, folders or pasted text; the button
+- **📚 Documents (RAG)**: a per-conversation knowledge base for large files, folders, pasted text or crawled websites; the button
   shows how many documents the chat has. See [RAG](#rag-documents).
 - **🎤 Voice input**: talk instead of typing with the mic button or **Ctrl+M**. See [Voice input](#voice-input--transcription).
 - **Markdown replies**: replies are rendered as Markdown with [MDFX](https://github.com/JPro-one/jpro-platform)
@@ -178,6 +178,16 @@ Dangerous tools need approval on every call and run **without a sandbox**; timeo
 PowerShell output is UTF-8 and runs with `$ErrorActionPreference = 'Stop'`, so a cmdlet error cannot be
 hidden by a later successful command. Invalid timeout or working-directory argument types return errors.
 
+**Model argument resilience.** Built-in optional controls treat JSON `null`, blank strings and the strings
+`"null"` / `"default"` as omitted and use their documented defaults. Numeric/boolean controls also accept
+strings such as `"30"` and `"false"`; other invalid values return actionable errors rather than silently changing
+behavior. Required inputs still need real values. Literal content (file text, memory facts, skill instructions
+and POST/PUT/PATCH bodies) is not stripped or replaced just because it says `default` or `null`.
+Unused alternatives such as `sourcePath: null` do not conflict with a provided binary source. Tool-call parsing
+preserves explicit JSON nulls so each tool can validate them. MCP and agent-created tools retain their own
+argument contracts: the harness does not rewrite their arbitrary payloads or guess their defaults.
+The model's tool instructions recommend omitting unused arguments.
+
 ### File discovery
 
 Use `file_discovery` instead of shell commands for read-only directory listing, filename discovery and content
@@ -219,12 +229,15 @@ only the variable name. Missing variables fail the call. Prefer this over puttin
 The tool redacts that token if it is echoed verbatim in the returned text or selected response headers; this is not
 a guarantee against encoded or transformed secrets returned by a server.
 
-Request bodies are UTF-8 strings up to 1 MB; GET/HEAD reject bodies. The total request timeout defaults to 30 seconds
+Request bodies are UTF-8 strings up to 1 MB; GET/HEAD ignore empty/null/default body placeholders but reject real
+nonempty bodies. Other methods preserve the supplied body exactly. The total request timeout defaults to 30 seconds
 (`timeoutSeconds`, 1–120), including receiving the response body. Text responses default to 16 KiB
 (`maxResponseBytes`, maximum 64 KiB); results explicitly report truncation. JSON, XML and text media types are
 supported; binary downloads are not implemented in this tool. Response character sets are honored, defaulting to UTF-8.
 Only Content-Type, Location, Retry-After, ETag and Last-Modified response headers are returned, not cookies.
 TLS verification stays enabled, URLs cannot embed credentials, and transport/framing headers cannot be overridden.
+Reaching the response cap returns a successful truncated response for 2xx text, not a stream-cancellation error.
+Transport diagnostics distinguish DNS, connection, TLS/certificate and timeout problems without echoing credentials.
 There is no cookie jar, redirect following or automatic retry of results. Non-2xx statuses return failed tool results
 with the response details. After cancellation or a timeout, **remote state is unknown**: do not blindly retry mutations.
 
@@ -437,9 +450,18 @@ memories, documents belong to **one conversation**.
 
 ![Answering questions about a project from 14 indexed documents (📚 14 in the top bar)](img/RAGInAction.PNG)
 
+![Answering questions about the ABC conjecture using 20 documents indexed from a website](img/WebsiteAsRAG.PNG)
+
 - **Adding documents**: click **📚** in the chat window. You can add files (markdown, text, log, CSV, JSON, YAML, XML,
-  HTML, Java, C#, Python and PDF), a folder (recursive, up to 500 files), or pasted text, or drop files onto the window. Indexing runs in the
+  HTML, Java, C#, Python and PDF), a folder (recursive, up to 500 files), pasted text, or a website (**Add URL…**), or drop files onto the window. Indexing runs in the
   background with progress and **Cancel**. The agent can also add documents with `rag_add`.
+- **Add URL…** is a small same-host crawler. It indexes the start page and follows its links breadth-first up to a
+  **Max depth** (0 = only that page, default 1, max 5) and **Max pages** (default 25, max 200). Links to other hosts are
+  ignored (`www.` and http/https differences count as the same host). Pages that redirect to another host are skipped,
+  as are `nofollow` links, non-HTML resources (PDF, images, archives, …) and pages already indexed in the
+  conversation. Duplicate content is indexed once. Fetching uses the web search settings (see the Tools tab): robots.txt,
+  1 s per-host pacing, size and timeout limits, and the private-network block. Each page becomes a document named
+  after its title, with its URL as the source.
 - **Indexing**: text is split into overlapping chunks (default 1200 characters with a 200-character overlap), cut at
   paragraph or sentence boundaries where possible. Each chunk is embedded, and the chunks and their vectors are stored
   in an [Apache Lucene](https://lucene.apache.org/) 9 index in `~/.harness-exp/rag-index/` (the folder can be changed

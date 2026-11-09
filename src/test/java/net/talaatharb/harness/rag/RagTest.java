@@ -56,6 +56,27 @@ class RagTest {
     }
 
     @Test
+    void toolArgumentsIgnoreUnusedPathAndDefaultControlsButRejectConflictingSources() throws Exception {
+        RagService rag = service();
+        var ingest = new RagIngestTool(rag);
+        String previous = ConversationScope.enter("resilient");
+        try {
+            var args = new java.util.HashMap<String, Object>();
+            args.put("text", "default");
+            args.put("path", "default");
+            args.put("name", null);
+            assertTrue(ingest.execute(args).success());
+            assertEquals("Agent notes", rag.documents("resilient").get(0).name);
+            assertFalse(ingest.execute(Map.of("path", "file.txt", "text", "also supplied")).success());
+            var search = new RagSearchTool(rag);
+            assertTrue(search.execute(Map.of("query", "default", "limit", "")).success());
+            assertFalse(search.execute(Map.of("limit", "NaN")).success());
+        } finally {
+            ConversationScope.restore(previous);
+        }
+    }
+
+    @Test
     void chunkerSplitsWithOverlapAndRespectsSize() {
         StringBuilder text = new StringBuilder();
         for (int i = 0; i < 200; i++) {

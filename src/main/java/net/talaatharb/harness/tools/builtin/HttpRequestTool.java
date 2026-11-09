@@ -32,6 +32,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.inject.Inject;
 import net.talaatharb.harness.tools.RiskLevel;
 import net.talaatharb.harness.tools.Tool;
+import net.talaatharb.harness.tools.ToolArguments;
 import net.talaatharb.harness.tools.ToolResult;
 
 /** Explicitly approved HTTP API access, with no redirects, cookies or application-level retries. */
@@ -75,7 +76,8 @@ public class HttpRequestTool implements Tool {
                 + "\"bearerTokenEnv\":\"optional environment variable name\","
                 + "\"timeoutSeconds\":30,\"maxResponseBytes\":16384} "
                 + "Methods: GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS. Timeout 1-120s; response max 65536 bytes. "
-                + "GET/HEAD do not accept a body. Redirects and non-2xx statuses are errors.";
+                + "Omit unused fields; null, blank or 'default' optional controls use defaults. "
+                + "GET/HEAD ignore empty bodies but reject nonempty bodies. Redirects and non-2xx statuses are errors.";
     }
 
     @Override
@@ -84,13 +86,13 @@ public class HttpRequestTool implements Tool {
             if (arguments == null) {
                 throw new IllegalArgumentException("Arguments are required");
             }
-            URI uri = uri(ToolArguments.string(arguments, "url", null));
+            URI uri = uri(ToolArguments.string(arguments, "url", null).strip());
             if (!Set.of("http", "https").contains(uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT))
                     || uri.getHost() == null || uri.getRawUserInfo() != null || uri.getRawFragment() != null
                     || uri.getPort() > 65535 || uri.getPort() == 0) {
                 throw new IllegalArgumentException("URL must be HTTP(S), with a host and without userinfo or a fragment");
             }
-            String method = ToolArguments.string(arguments, "method", "GET").toUpperCase(Locale.ROOT);
+            String method = ToolArguments.string(arguments, "method", "GET").strip().toUpperCase(Locale.ROOT);
             if (!METHODS.contains(method)) {
                 throw new IllegalArgumentException("Unsupported HTTP method");
             }
@@ -104,16 +106,22 @@ public class HttpRequestTool implements Tool {
             if (body.length() > MAX_REQUEST_BYTES || body.getBytes(StandardCharsets.UTF_8).length > MAX_REQUEST_BYTES) {
                 throw new IllegalArgumentException("Request body exceeds 1 MB");
             }
-            if (rawBody != null && (method.equals("GET") || method.equals("HEAD"))) {
-                throw new IllegalArgumentException("GET/HEAD requests cannot have a body");
+            if (method.equals("GET") || method.equals("HEAD")) {
+                if (!ToolArguments.omitted(rawBody)) {
+                    throw new IllegalArgumentException("GET/HEAD requests cannot have a nonempty body; omit 'body'");
+                }
+                rawBody = null;
             }
             HttpRequest.Builder request = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(timeout));
             Object rawHeaders = arguments.get("headers");
-            if (rawHeaders != null) {
+            if (!ToolArguments.omitted(rawHeaders)) {
                 if (!(rawHeaders instanceof Map<?, ?> headers) || headers.size() > 32) {
                     throw new IllegalArgumentException("headers must be an object with at most 32 string values");
                 }
                 for (var entry : headers.entrySet()) {
+                    if (entry.getValue() == null) {
+                        continue;
+                    }
                     if (!(entry.getKey() instanceof String name) || !(entry.getValue() instanceof String value)
                             || BLOCKED_HEADERS.contains(name.toLowerCase(Locale.ROOT))
                             || name.length() > 128 || value.length() > 8192) {
@@ -123,8 +131,8 @@ public class HttpRequestTool implements Tool {
                 }
             }
             String token = null;
-            if (arguments.containsKey("bearerTokenEnv")) {
-                String variable = ToolArguments.string(arguments, "bearerTokenEnv", null);
+            if (!ToolArguments.omitted(arguments.get("bearerTokenEnv"))) {
+                String variable = ToolArguments.string(arguments, "bearerTokenEnv", null).strip();
                 if (!variable.matches("[A-Za-z_][A-Za-z0-9_]*")) {
                     throw new IllegalArgumentException("bearerTokenEnv must name an environment variable");
                 }
@@ -151,9 +159,10 @@ public class HttpRequestTool implements Tool {
                 return ToolResult.error("HTTP request timed out; remote state is unknown. Do not blindly retry mutations.");
             } catch (ExecutionException e) {
                 // Client exceptions can include URLs or header values; do not echo them into the transcript.
-                LOG.warn("HTTP transport failed: {}", e.getCause().getClass().getSimpleName());
-                return ToolResult.error("HTTP request failed (" + e.getCause().getClass().getSimpleName()
-                        + "); remote state may be unknown.");
+                String reason = transportFailure(e.getCause());
+                LOG.warn("HTTP transport failed: {}", reason);
+                return ToolResult.error("HTTP request failed: " + reason
+                        + ". Remote state may be unknown; do not blindly retry mutations.");
             } finally {
                 pending.cancel(true);
             }
@@ -200,6 +209,26 @@ public class HttpRequestTool implements Tool {
         }
     }
 
+    static String transportFailure(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof javax.net.ssl.SSLException) {
+                return "TLS negotiation/certificate verification failed; check the server certificate and Java trust store";
+            }
+            if (cause instanceof java.nio.channels.UnresolvedAddressException
+                    || cause instanceof java.net.UnknownHostException) {
+                return "DNS lookup failed; check the hostname and network";
+            }
+            if (cause instanceof java.net.ConnectException) {
+                return "Connection failed; check the host, port, firewall and whether the service is running";
+            }
+            if (cause instanceof java.net.http.HttpTimeoutException) {
+                return "Request timed out; the server did not finish responding within the timeout";
+            }
+        }
+        return "Response transport interrupted or invalid (" + failure.getClass().getSimpleName()
+                + "); the server may have closed/reset the connection or sent an incomplete response";
+    }
+
     private static URI uri(String url) {
         try {
             return URI.create(url);
@@ -217,7 +246,7 @@ public class HttpRequestTool implements Tool {
     }
 
     /** Captures at most limit+1 bytes (the extra byte detects truncation), then cancels the subscription. */
-    private static final class LimitedBody implements HttpResponse.BodySubscriber<byte[]> {
+    static final class LimitedBody implements HttpResponse.BodySubscriber<byte[]> {
         private final int limit;
         private final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         private final CompletableFuture<byte[]> result = new CompletableFuture<>();
@@ -236,8 +265,9 @@ public class HttpRequestTool implements Tool {
                 buffer.get(chunk);
                 bytes.writeBytes(chunk);
                 if (bytes.size() > limit) {
-                    subscription.cancel();
+                    // Cancellation can synchronously trigger onError (especially HTTP/2 stream resets).
                     result.complete(bytes.toByteArray());
+                    subscription.cancel();
                     return;
                 }
             }

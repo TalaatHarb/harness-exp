@@ -12,6 +12,7 @@ import net.talaatharb.harness.agent.ConversationScope;
 import net.talaatharb.harness.history.ArtifactStore;
 import net.talaatharb.harness.tools.RiskLevel;
 import net.talaatharb.harness.tools.Tool;
+import net.talaatharb.harness.tools.ToolArguments;
 import net.talaatharb.harness.tools.ToolResult;
 
 /** Saves binary bytes without converting them through text encoding. */
@@ -55,22 +56,19 @@ public class WriteBinaryFileTool implements Tool {
         if (arguments == null || !(arguments.get("path") instanceof String name) || name.isBlank()) {
             return ToolResult.error("Missing required string argument 'path'");
         }
-        boolean hasBase64 = arguments.containsKey("base64");
-        boolean hasSource = arguments.containsKey("sourcePath");
+        boolean hasBase64 = !ToolArguments.omitted(arguments.get("base64"));
+        boolean hasSource = !ToolArguments.omitted(arguments.get("sourcePath"));
         if (hasBase64 == hasSource) {
             return ToolResult.error("Supply exactly one of 'base64' or 'sourcePath'");
         }
-        Object artifactMode = arguments.getOrDefault("artifact", true);
-        if (!(artifactMode instanceof Boolean downloadable)) {
-            return ToolResult.error("'artifact' must be a boolean");
-        }
-        if (arguments.containsKey("append")) {
-            return ToolResult.error("Binary writes do not accept 'append'");
-        }
-        if (downloadable && ConversationScope.current() == null) {
-            return ToolResult.error("Downloadable files require an active conversation");
-        }
         try {
+            boolean downloadable = ToolArguments.bool(arguments, "artifact", true);
+            if (ToolArguments.bool(arguments, "append", false)) {
+                return ToolResult.error("Binary writes do not support append:true");
+            }
+            if (downloadable && ConversationScope.current() == null) {
+                return ToolResult.error("Downloadable files require an active conversation");
+            }
             byte[] content;
             if (hasBase64) {
                 if (!(arguments.get("base64") instanceof String encoded)) {

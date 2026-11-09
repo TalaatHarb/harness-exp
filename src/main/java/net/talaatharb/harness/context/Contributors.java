@@ -115,7 +115,10 @@ public final class Contributors {
                     .append("when you have enough information, answer the user normally.\nAvailable tools:");
             sb.append("\nTool results are authoritative: never claim an action succeeded unless its tool returned "
                     + "success. A denied or failed call did not complete the action; say so. Never retry a denied "
-                    + "action. For memory requests, save every requested fact and report the exact saved facts.\n");
+                    + "action. For memory requests, save every requested fact and report the exact saved facts.\n"
+                    + "Omit unused optional arguments rather than filling them with null, empty strings, 'default', "
+                    + "or explanatory placeholder text. Use actual JSON booleans/numbers and follow the tool's "
+                    + "argument contract; never invent missing required data.\n");
             for (Tool t : enabled) {
                 sb.append("\n- ").append(t.name()).append(": ").append(t.description())
                         .append(" Arguments: ").append(t.argumentsHint());

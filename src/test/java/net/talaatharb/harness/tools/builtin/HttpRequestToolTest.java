@@ -49,6 +49,65 @@ class HttpRequestToolTest {
     }
 
     @Test
+    void acceptsEmptyGetBodiesAndPlaceholderOptionalControls() throws Exception {
+        server.createContext("/get", exchange -> reply(exchange, 200, "text/plain", exchange.getRequestMethod()));
+        for (String placeholder : java.util.List.of("", " ", "default", "null", " DEFAULT ")) {
+            var args = new java.util.HashMap<String, Object>();
+            args.put("url", " " + base + "/get ");
+            args.put("body", placeholder);
+            args.put("method", placeholder);
+            args.put("headers", placeholder);
+            args.put("bearerTokenEnv", placeholder);
+            args.put("timeoutSeconds", placeholder);
+            args.put("maxResponseBytes", placeholder);
+            var result = tool.execute(args);
+            assertTrue(result.success(), result.output());
+            assertEquals("GET", json.readTree(result.output()).path("body").asText());
+            args.replaceAll((key, value) -> key.equals("url") ? value : null);
+            assertTrue(tool.execute(args).success());
+        }
+        assertTrue(tool.execute(Map.of("url", base + "/get", "timeoutSeconds", "5",
+                "maxResponseBytes", "100")).success());
+    }
+
+    @Test
+    void preservesLiteralPostBodyIncludingPlaceholderWords() throws Exception {
+        server.createContext("/literal", exchange -> reply(exchange, 200, "text/plain",
+                new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8)));
+        for (String content : java.util.List.of("", " ", "null", "default")) {
+            var result = tool.execute(Map.of("url", base + "/literal", "method", "POST", "body", content));
+            assertTrue(result.success(), result.output());
+            assertEquals(content, json.readTree(result.output()).path("body").asText());
+        }
+    }
+
+    @Test
+    void truncationSurvivesSynchronousCancellationError() throws Exception {
+        var subscriber = new HttpRequestTool.LimitedBody(3);
+        var cancelled = new java.util.concurrent.atomic.AtomicBoolean();
+        subscriber.onSubscribe(new java.util.concurrent.Flow.Subscription() {
+            @Override public void request(long n) {}
+            @Override public void cancel() {
+                cancelled.set(true);
+                subscriber.onError(new IOException("stream reset by cancellation"));
+            }
+        });
+        subscriber.onNext(java.util.List.of(java.nio.ByteBuffer.wrap("abcdef".getBytes(StandardCharsets.UTF_8))));
+        assertEquals("abcd", new String(subscriber.getBody().toCompletableFuture().get(), StandardCharsets.UTF_8));
+        assertTrue(cancelled.get());
+    }
+
+    @Test
+    void transportDiagnosticsExplainFailuresWithoutEchoingSecrets() {
+        assertTrue(HttpRequestTool.transportFailure(new IOException("secret",
+                new javax.net.ssl.SSLHandshakeException("secret"))).contains("TLS"));
+        assertTrue(HttpRequestTool.transportFailure(new java.net.UnknownHostException("secret")).contains("DNS"));
+        assertTrue(HttpRequestTool.transportFailure(new java.net.ConnectException("secret")).contains("Connection"));
+        assertTrue(HttpRequestTool.transportFailure(new IOException("secret")).contains("incomplete response"));
+        assertFalse(HttpRequestTool.transportFailure(new IOException("secret")).contains("secret"));
+    }
+
+    @Test
     void sendsMethodHeadersBodyAndRedactsEnvironmentBearerToken() throws Exception {
         server.createContext("/echo", exchange -> reply(exchange, 201, "application/json",
                 exchange.getRequestMethod() + " " + exchange.getRequestHeaders().getFirst("Authorization")

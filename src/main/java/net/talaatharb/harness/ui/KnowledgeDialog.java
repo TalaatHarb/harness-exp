@@ -32,6 +32,7 @@ import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.SelectionMode;
+import javafx.scene.control.Spinner;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
@@ -39,6 +40,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -54,6 +56,9 @@ import net.talaatharb.harness.rag.RagDocument;
 import net.talaatharb.harness.rag.RagService;
 import net.talaatharb.harness.rag.RagService.Hit;
 import net.talaatharb.harness.rag.RagService.SearchResult;
+import net.talaatharb.harness.web.DocumentDeduplicator;
+import net.talaatharb.harness.web.SiteCrawler;
+import net.talaatharb.harness.web.WebResearchService;
 
 /** Per-conversation document store ("📚"): add, inspect, search, copy and remove RAG documents. */
 public class KnowledgeDialog {
@@ -62,6 +67,7 @@ public class KnowledgeDialog {
             .withZone(ZoneId.systemDefault());
 
     private final RagService rag;
+    private final SiteCrawler crawler;
     private final String conversationId;
     private final Supplier<List<ConversationSummary>> otherConversations;
     private final ObservableList<RagDocument> documents = FXCollections.observableArrayList();
@@ -88,7 +94,14 @@ public class KnowledgeDialog {
      */
     public KnowledgeDialog(RagService rag, String conversationId, String title,
             Supplier<List<ConversationSummary>> otherConversations) {
+        this(rag, null, conversationId, title, otherConversations);
+    }
+
+    /** @param crawler website crawler behind "Add URL…"; {@code null} disables it */
+    public KnowledgeDialog(RagService rag, SiteCrawler crawler, String conversationId, String title,
+            Supplier<List<ConversationSummary>> otherConversations) {
         this.rag = rag;
+        this.crawler = crawler;
         this.conversationId = conversationId;
         this.otherConversations = otherConversations;
         stage.setTitle("Documents — " + (title == null || title.isBlank() ? "new conversation" : title));
@@ -129,7 +142,7 @@ public class KnowledgeDialog {
                 d -> d.createdAt == null ? "" : TIME.format(d.createdAt));
         table.getColumns().setAll(List.of(name, parts, chars, embedder, added));
         table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
-        table.setPlaceholder(new Label("No documents yet: add files, a folder or text."));
+        table.setPlaceholder(new Label("No documents yet: add files, a folder, text or a website."));
         table.setRowFactory(t -> {
             var row = new javafx.scene.control.TableRow<RagDocument>() {
                 @Override
@@ -145,6 +158,11 @@ public class KnowledgeDialog {
         Button addFiles = action("Add files…", this::onAddFiles);
         Button addFolder = action("Add folder…", this::onAddFolder);
         Button addText = action("Add text…", this::onAddText);
+        Button addUrl = action("Add URL…", this::onAddUrl);
+        addUrl.setTooltip(new Tooltip("Crawl a website (same host only, up to a link depth) and index its pages"));
+        if (crawler == null) {
+            addUrl.disableProperty().bind(javafx.beans.binding.Bindings.createBooleanBinding(() -> true));
+        }
         Button delete = action("Delete", this::onDelete);
         Button copy = action("Copy to conversation…", this::onCopy);
         Button reindex = action("Re-index", this::onReindex);
@@ -153,7 +171,7 @@ public class KnowledgeDialog {
         copy.setTooltip(new Tooltip("Copy the selected documents (or all, if none selected) to another conversation"));
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox buttons = new HBox(6, addFiles, addFolder, addText, spacer, copy, reindex, delete);
+        HBox buttons = new HBox(6, addFiles, addFolder, addText, addUrl, spacer, copy, reindex, delete);
         buttons.setAlignment(Pos.CENTER_LEFT);
 
         progressBar.setMaxWidth(Double.MAX_VALUE);
@@ -300,6 +318,98 @@ public class KnowledgeDialog {
             rag.ingestText(conversationId, name, "pasted text", body, progress);
             return "Added " + name + ".";
         });
+    }
+
+    private void onAddUrl() {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.initOwner(stage);
+        dialog.setTitle("Add URL");
+        dialog.setHeaderText("Index a web page and the pages it links to on the same host.");
+        TextField urlField = new TextField();
+        urlField.setPromptText("https://example.com/docs/");
+        urlField.setPrefColumnCount(40);
+        Spinner<Integer> depth = new Spinner<>(0, SiteCrawler.MAX_DEPTH, SiteCrawler.DEFAULT_DEPTH);
+        depth.setEditable(true);
+        depth.setTooltip(new Tooltip("0 = only this page, 1 = plus the pages it links to, …"));
+        Spinner<Integer> pages = new Spinner<>(1, SiteCrawler.MAX_PAGES, SiteCrawler.DEFAULT_PAGES);
+        pages.setEditable(true);
+        Label note = new Label("Links to other hosts are ignored. robots.txt, request pacing and the private-network "
+                + "block from the web settings apply.");
+        note.setWrapText(true);
+        note.getStyleClass().add("section-help");
+        GridPane grid = new GridPane();
+        grid.setHgap(8);
+        grid.setVgap(8);
+        grid.addRow(0, new Label("URL"), urlField);
+        grid.addRow(1, new Label("Max depth"), depth);
+        grid.addRow(2, new Label("Max pages"), pages);
+        grid.add(note, 0, 3, 2, 1);
+        ColumnConstraints labels = new ColumnConstraints();
+        labels.setMinWidth(Region.USE_PREF_SIZE);
+        ColumnConstraints inputs = new ColumnConstraints();
+        inputs.setMinWidth(0);
+        inputs.setHgrow(Priority.ALWAYS);
+        grid.getColumnConstraints().setAll(labels, inputs);
+        urlField.setMinWidth(0);
+        GridPane.setHgrow(urlField, Priority.ALWAYS);
+        dialog.getDialogPane().setContent(grid);
+        dialog.getDialogPane().setPrefWidth(560);
+        ButtonType add = new ButtonType("Crawl and add", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().setAll(add, ButtonType.CANCEL);
+        dialog.getDialogPane().lookupButton(add).disableProperty().bind(
+                javafx.beans.binding.Bindings.createBooleanBinding(() -> urlField.getText().isBlank(),
+                        urlField.textProperty()));
+        Platform.runLater(urlField::requestFocus);
+        if (dialog.showAndWait().orElse(ButtonType.CANCEL) != add) {
+            return;
+        }
+        crawl(urlField.getText().strip(), spinnerValue(depth), spinnerValue(pages));
+    }
+
+    private static int spinnerValue(Spinner<Integer> spinner) {
+        try {
+            spinner.commitValue();
+        } catch (RuntimeException e) {
+            // invalid text: keep the last valid value
+        }
+        return spinner.getValue();
+    }
+
+    private void crawl(String url, int depth, int maxPages) {
+        java.util.Set<String> indexed = new java.util.HashSet<>();
+        for (RagDocument d : documents) {
+            if (d.source != null && d.source.startsWith("http")) {
+                indexed.add(DocumentDeduplicator.normalizeUrl(d.source));
+            }
+        }
+        run("Crawling " + url, progress -> {
+            List<String> added = new ArrayList<>();
+            SiteCrawler.Result result = crawler.crawl(url, depth, maxPages, indexed, page -> {
+                var doc = page.document();
+                rag.ingestText(conversationId, doc.title().isBlank() ? doc.url() : doc.title(), doc.url(),
+                        SiteCrawler.indexText(doc), null);
+                added.add(doc.url());
+                Platform.runLater(this::reload);
+            }, progress::update);
+            StringBuilder summary = new StringBuilder("Added ").append(result.accepted()).append(" page(s) from ")
+                    .append(url).append('.');
+            if (!result.skipped().isEmpty()) {
+                summary.append(" Skipped ").append(result.skipped().size()).append(" (")
+                        .append(reasons(result.skipped())).append(").");
+            }
+            if (!result.failures().isEmpty()) {
+                summary.append(" Failed ").append(result.failures().size()).append(": ")
+                        .append(reasons(result.failures()));
+            }
+            LOG.info("Crawled {} (depth {}, max {}): added {}, skipped {}, failed {}", url, depth, maxPages,
+                    added.size(), result.skipped().size(), result.failures().size());
+            return summary.toString();
+        });
+    }
+
+    private static String reasons(List<WebResearchService.Skipped> items) {
+        String text = String.join("; ", items.stream().limit(3).map(s -> s.url() + ": " + s.reason()).toList());
+        return items.size() > 3 ? text + "; …" : text;
     }
 
     private void ingest(List<Path> files) {

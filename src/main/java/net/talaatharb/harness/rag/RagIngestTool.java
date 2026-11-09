@@ -9,6 +9,7 @@ import com.google.inject.Inject;
 import net.talaatharb.harness.agent.ConversationScope;
 import net.talaatharb.harness.tools.RiskLevel;
 import net.talaatharb.harness.tools.Tool;
+import net.talaatharb.harness.tools.ToolArguments;
 import net.talaatharb.harness.tools.ToolResult;
 
 /** Adds text or a local file to the current conversation's knowledge base. Sensitive: it can read local files. */
@@ -52,11 +53,18 @@ public class RagIngestTool implements Tool {
         if (conversation == null) {
             return ToolResult.error("No conversation is open.");
         }
-        String text = args.get("text") == null ? "" : String.valueOf(args.get("text"));
-        String path = args.get("path") == null ? "" : String.valueOf(args.get("path")).strip();
-        String name = args.get("name") == null ? "" : String.valueOf(args.get("name")).strip();
         RagDocument doc;
         try {
+            Object rawText = args.get("text");
+            if (rawText != null && !(rawText instanceof String)) {
+                return ToolResult.error("'text' must be a string");
+            }
+            String text = rawText == null ? "" : (String) rawText;
+            String path = ToolArguments.string(args, "path", "").strip();
+            String name = ToolArguments.string(args, "name", "").strip();
+            if (!path.isEmpty() && !text.isBlank()) {
+                return ToolResult.error("Supply either 'path' or 'text', not both");
+            }
             if (!path.isEmpty()) {
                 Path file = Path.of(path).toAbsolutePath().normalize();
                 if (!Files.isRegularFile(file)) {

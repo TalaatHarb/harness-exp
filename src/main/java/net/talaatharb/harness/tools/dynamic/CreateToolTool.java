@@ -13,6 +13,7 @@ import com.google.inject.Provider;
 
 import net.talaatharb.harness.tools.RiskLevel;
 import net.talaatharb.harness.tools.Tool;
+import net.talaatharb.harness.tools.ToolArguments;
 import net.talaatharb.harness.tools.ToolCallParser;
 import net.talaatharb.harness.tools.ToolResult;
 
@@ -65,8 +66,16 @@ public class CreateToolTool implements Tool {
 
     @Override
     public ToolResult execute(Map<String, Object> arguments) {
-        DynamicToolSpec spec = new DynamicToolSpec(str(arguments, "name"), str(arguments, "description"),
-                str(arguments, "argumentsHint"), str(arguments, "sourceCode"));
+        DynamicToolSpec spec;
+        try {
+            spec = new DynamicToolSpec(ToolArguments.string(arguments, "name", ""),
+                    ToolArguments.string(arguments, "description", ""),
+                    arguments != null && arguments.get("argumentsHint") instanceof Map<?, ?> hint
+                            ? ToolCallParser.toJson(hint) : ToolArguments.string(arguments, "argumentsHint", ""),
+                    ToolArguments.string(arguments, "sourceCode", null));
+        } catch (IllegalArgumentException e) {
+            return ToolResult.error("Create tool arguments rejected: " + e.getMessage());
+        }
         applyDefaults(spec);
         Set<String> reserved = builtins.get().stream().map(Tool::name).collect(Collectors.toSet());
         try {
@@ -95,11 +104,4 @@ public class CreateToolTool implements Tool {
         }
     }
 
-    private static String str(Map<String, Object> arguments, String key) {
-        Object value = arguments == null ? null : arguments.get(key);
-        if (value == null || value instanceof String) {
-            return (String) value;
-        }
-        return ToolCallParser.toJson(value);
-    }
 }

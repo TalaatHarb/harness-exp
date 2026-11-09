@@ -39,6 +39,24 @@ class DynamicToolRegistryTest {
     }
 
     @Test
+    void createToolDerivesDefaultMetadataWithoutRewritingDelegateArguments() throws Exception {
+        var registry = new DynamicToolRegistry(dir);
+        var create = new CreateToolTool(registry, Set::of);
+        var args = new java.util.HashMap<String, Object>();
+        args.put("name", "default");
+        args.put("description", null);
+        args.put("argumentsHint", Map.of("text", "string"));
+        args.put("sourceCode", WORD_COUNT);
+        var result = create.execute(args);
+        assertTrue(result.success(), result.output());
+        Tool tool = registry.tools().get(0);
+        assertEquals("word_count", tool.name());
+        assertEquals("{\"text\":\"string\"}", tool.argumentsHint());
+        assertEquals("1", tool.execute(Map.of("text", "default")).output());
+        assertEquals("0", tool.execute(null).output());
+    }
+
+    @Test
     void createsCompilesExecutesAndPersists() throws Exception {
         DynamicToolRegistry registry = new DynamicToolRegistry(dir);
         Tool tool = registry.create(spec("word_count", WORD_COUNT), Set.of());

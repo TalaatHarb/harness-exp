@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import net.talaatharb.harness.tools.ToolResult;
+import net.talaatharb.harness.tools.ToolArguments;
 
 /** Runs an external process with a timeout and a bounded, merged stdout/stderr capture. */
 final class ProcessRunner {
@@ -21,7 +22,7 @@ final class ProcessRunner {
     }
 
     static int timeoutSeconds(Object raw) {
-        if (raw == null) {
+        if (ToolArguments.omitted(raw)) {
             return DEFAULT_TIMEOUT_SECONDS;
         }
         try {
@@ -37,7 +38,7 @@ final class ProcessRunner {
 
     /** Resolves an optional working directory argument; {@code null} means the current one. */
     static Path workingDirectory(Object raw) {
-        if (raw == null) {
+        if (ToolArguments.omitted(raw)) {
             return null;
         }
         if (!(raw instanceof String s)) {

@@ -21,6 +21,21 @@ class SystemToolsTest {
     @TempDir Path temp;
 
     @Test
+    void processControlsTreatOptionalPlaceholdersAsOmitted() throws Exception {
+        for (Object value : java.util.Arrays.asList(null, "", " ", "default", "null")) {
+            assertEquals(60, ProcessRunner.timeoutSeconds(value));
+            assertNull(ProcessRunner.workingDirectory(value));
+        }
+        var args = new java.util.HashMap<String, Object>();
+        args.put("command", "echo resilient");
+        args.put("timeoutSeconds", "default");
+        args.put("workingDirectory", null);
+        var result = new RunNativeShellTool().execute(args);
+        assertTrue(result.success(), result.output());
+        assertTrue(result.output().contains("resilient"));
+    }
+
+    @Test
     void writeFileWritesAppendsAndCreatesFolders() throws Exception {
         WriteFileTool tool = new WriteFileTool();
         assertEquals(RiskLevel.SENSITIVE, tool.risk());

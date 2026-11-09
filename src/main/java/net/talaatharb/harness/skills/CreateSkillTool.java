@@ -13,6 +13,7 @@ import com.google.inject.Inject;
 
 import net.talaatharb.harness.tools.RiskLevel;
 import net.talaatharb.harness.tools.Tool;
+import net.talaatharb.harness.tools.ToolArguments;
 import net.talaatharb.harness.tools.ToolResult;
 
 /** Lets the agent write (or update) a reusable skill in the skills folder. */
@@ -59,39 +60,44 @@ public class CreateSkillTool implements Tool {
 
     @Override
     public ToolResult execute(Map<String, Object> arguments) {
-        SkillDefinition skill = new SkillDefinition(str(arguments, "name"), str(arguments, "description"),
-                str(arguments, "instructions"), triggers(arguments == null ? null : arguments.get("triggers")), true);
-        boolean replacing = repository.findByName(skill.name).isPresent();
         try {
+            SkillDefinition skill = new SkillDefinition(ToolArguments.string(arguments, "name", null),
+                    ToolArguments.string(arguments, "description", ""),
+                    ToolArguments.string(arguments, "instructions", null),
+                    triggers(arguments == null ? null : arguments.get("triggers")), true);
+            boolean replacing = repository.findByName(skill.name).isPresent();
             SkillDefinition saved = repository.save(skill);
             String when = saved.triggers.isEmpty() ? "It is always active."
                     : "It is active when the user's message contains: " + String.join(", ", saved.triggers) + ".";
             return ToolResult.ok("Skill '" + saved.name + "' " + (replacing ? "updated" : "created") + " ("
                     + repository.file(saved.id) + "). " + when);
         } catch (IllegalArgumentException e) {
-            LOG.warn("create_skill '{}' rejected: {}", skill.name, e.getMessage());
+            LOG.warn("create_skill rejected: {}", e.getMessage());
             return ToolResult.error(e.getMessage());
         } catch (IOException e) {
-            LOG.error("create_skill '{}' could not be written", skill.name, e);
+            LOG.error("create_skill could not be written", e);
             return ToolResult.error("Could not save the skill: " + e.getMessage());
         }
     }
 
     /** Accepts a JSON list or a comma separated string. */
     static List<String> triggers(Object value) {
-        if (value == null) {
+        if (ToolArguments.omitted(value)) {
             return List.of();
         }
         List<String> items = new ArrayList<>();
         if (value instanceof Collection<?> list) {
-            list.forEach(item -> items.add(item == null ? null : String.valueOf(item)));
+            for (Object item : list) {
+                if (item != null && !(item instanceof String)) {
+                    throw new IllegalArgumentException("triggers must contain strings");
+                }
+                items.add((String) item);
+            }
             return SkillFiles.clean(items);
         }
-        return SkillFiles.parseList(String.valueOf(value));
-    }
-
-    private static String str(Map<String, Object> arguments, String key) {
-        Object value = arguments == null ? null : arguments.get(key);
-        return value == null ? "" : String.valueOf(value);
+        if (value instanceof String text) {
+            return SkillFiles.parseList(text);
+        }
+        throw new IllegalArgumentException("triggers must be a string or an array of strings");
     }
 }

@@ -2,6 +2,7 @@ package net.talaatharb.harness.web;
 
 import java.util.List;
 import java.util.Map;
+import net.talaatharb.harness.tools.ToolArguments;
 
 /** Argument parsing and formatting shared by the two web tools. */
 final class WebToolArgs {
@@ -10,17 +11,14 @@ final class WebToolArgs {
 
     static String query(Map<String, Object> args) {
         Object q = args.get("query");
-        return q == null ? "" : String.valueOf(q).strip();
+        if (q != null && !(q instanceof String)) {
+            throw new IllegalArgumentException("'query' must be a string");
+        }
+        return q == null ? "" : ((String) q).strip();
     }
 
     static int maxPages(Map<String, Object> args, int configured) {
-        Object v = args.get("maxPages");
-        try {
-            int n = v instanceof Number num ? num.intValue() : v == null ? configured : Integer.parseInt(String.valueOf(v).strip());
-            return Math.max(1, Math.min(n, configured));
-        } catch (NumberFormatException e) {
-            return configured;
-        }
+        return Math.min(configured, ToolArguments.integer(args, "maxPages", configured, Integer.MAX_VALUE));
     }
 
     static void appendProblems(StringBuilder sb, String heading, List<WebResearchService.Skipped> items) {

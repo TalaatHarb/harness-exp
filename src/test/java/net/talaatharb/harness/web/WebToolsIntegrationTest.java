@@ -103,6 +103,16 @@ class WebToolsIntegrationTest {
     }
 
     @Test
+    void placeholderLimitsUseConfiguredDefaultAndInvalidInputsDoNotSearch() throws Exception {
+        var extract = new WebSearchExtractTool(research());
+        assertTrue(extract.execute(Map.of("query", "quantum", "maxPages", "default")).success());
+        int count = queries.size();
+        assertFalse(extract.execute(Map.of("query", Map.of())).success());
+        assertFalse(extract.execute(Map.of("query", "q", "maxPages", "NaN")).success());
+        assertEquals(count, queries.size());
+    }
+
+    @Test
     void extractToolReturnsContentWithoutPersisting() throws Exception {
         RagService rag = rag();
         WebSearchExtractTool tool = new WebSearchExtractTool(research());

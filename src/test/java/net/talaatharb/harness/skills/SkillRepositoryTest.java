@@ -130,6 +130,24 @@ class SkillRepositoryTest {
     }
 
     @Test
+    void createSkillIgnoresPlaceholderControlsButDoesNotStringifyInvalidInstructions() {
+        SkillRepository repo = new SkillRepository(skillsDir(), null);
+        CreateSkillTool tool = new CreateSkillTool(repo);
+        var args = new java.util.HashMap<String, Object>();
+        args.put("name", "Literal");
+        args.put("instructions", "default");
+        args.put("description", null);
+        args.put("triggers", "default");
+        assertTrue(tool.execute(args).success());
+        var skill = repo.findByName("Literal").orElseThrow();
+        assertEquals("default", skill.instructions);
+        assertTrue(skill.triggers.isEmpty());
+        args.put("instructions", java.util.Map.of("bad", "type"));
+        assertFalse(tool.execute(args).success());
+        assertEquals("default", repo.findByName("Literal").orElseThrow().instructions);
+    }
+
+    @Test
     void createSkillToolAcceptsCommaTriggersAndReportsErrors() {
         SkillRepository repo = new SkillRepository(skillsDir(), null);
         CreateSkillTool tool = new CreateSkillTool(repo);

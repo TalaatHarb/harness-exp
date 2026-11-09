@@ -14,6 +14,7 @@ import net.talaatharb.harness.agent.ConversationScope;
 import net.talaatharb.harness.history.ArtifactStore;
 import net.talaatharb.harness.tools.RiskLevel;
 import net.talaatharb.harness.tools.Tool;
+import net.talaatharb.harness.tools.ToolArguments;
 import net.talaatharb.harness.tools.ToolResult;
 
 /** Writes a local UTF-8 text file. Sensitive: the default approval policy asks the user first. */
@@ -72,12 +73,17 @@ public class WriteFileTool implements Tool {
         if (text.length() > MAX_CHARS) {
             return ToolResult.error("Content is too large (" + text.length() + " > " + MAX_CHARS + " characters)");
         }
-        boolean append = Boolean.parseBoolean(String.valueOf(arguments.getOrDefault("append", false)));
-        Object artifactMode = arguments.getOrDefault("artifact", false);
-        if (!(artifactMode instanceof Boolean)) {
-            return ToolResult.error("'artifact' must be a boolean");
+        boolean append;
+        boolean artifactMode;
+        Path path;
+        try {
+            append = ToolArguments.bool(arguments, "append", false);
+            artifactMode = ToolArguments.bool(arguments, "artifact", false);
+            path = Path.of(p).toAbsolutePath().normalize();
+        } catch (IllegalArgumentException e) {
+            return ToolResult.error("Write arguments rejected: " + e.getMessage());
         }
-        if (Boolean.TRUE.equals(artifactMode)) {
+        if (artifactMode) {
             if (artifacts == null || ConversationScope.current() == null) {
                 return ToolResult.error("Downloadable files require an active conversation and artifact storage");
             }
@@ -91,7 +97,6 @@ public class WriteFileTool implements Tool {
                 return ToolResult.error(e.getMessage());
             }
         }
-        Path path = Path.of(p).toAbsolutePath().normalize();
         if (Files.isDirectory(path)) {
             return ToolResult.error("Path is a directory: " + path);
         }

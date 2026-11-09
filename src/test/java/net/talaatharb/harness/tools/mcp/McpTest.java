@@ -230,6 +230,11 @@ class McpTest {
             ToolResult ok = echo.execute(Map.of("text", "hi"));
             assertTrue(ok.success());
             assertEquals("echo: hi", ok.output());
+            assertEquals("echo: default", echo.execute(Map.of("text", "default")).output());
+            var nullable = net.talaatharb.harness.tools.ToolCallParser.parse(
+                    "{\"name\":\"echo\",\"arguments\":{\"text\":null}}").orElseThrow();
+            assertTrue(echo.execute(nullable.arguments()).success());
+            assertTrue(echo.execute(null).success());
 
             McpTool fail = new McpTool("fail", client, tools.get(1), () -> TIMEOUT);
             assertEquals(RiskLevel.DANGEROUS, fail.risk());

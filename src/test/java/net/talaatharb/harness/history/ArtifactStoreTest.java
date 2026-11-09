@@ -67,7 +67,7 @@ class ArtifactStoreTest {
         try {
             assertFalse(tool.execute(Map.of("artifact", true, "path", "../bad.txt", "content", "x")).success());
             assertFalse(tool.execute(Map.of("artifact", true, "path", "story.txt", "content", "x", "append", true)).success());
-            assertFalse(tool.execute(Map.of("artifact", "true", "path", "story.txt", "content", "x")).success());
+            assertFalse(tool.execute(Map.of("artifact", "maybe", "path", "story.txt", "content", "x")).success());
         } finally {
             ConversationScope.restore(previous);
         }

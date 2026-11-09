@@ -6,6 +6,7 @@ import java.util.Map;
 import com.google.inject.Inject;
 
 import net.talaatharb.harness.tools.Tool;
+import net.talaatharb.harness.tools.ToolArguments;
 import net.talaatharb.harness.tools.ToolResult;
 
 /** Searches long-term memory (markdown folder or MapDB, as configured). */
@@ -39,16 +40,14 @@ public class RecallTool implements Tool {
     @Override
     public ToolResult execute(Map<String, Object> arguments) {
         Map<String, Object> args = arguments == null ? Map.of() : arguments;
-        String query = RememberTool.str(args.get("query"));
         int max = Math.max(1, memory.settings().maxRecallResults);
-        int limit = max;
-        Object requested = args.get("limit");
-        if (requested != null) {
-            try {
-                limit = Math.max(1, Math.min(max, (int) Double.parseDouble(String.valueOf(requested))));
-            } catch (NumberFormatException e) {
-                return ToolResult.error("limit must be a number");
-            }
+        String query;
+        int limit;
+        try {
+            query = ToolArguments.string(args, "query", "").strip();
+            limit = Math.min(max, ToolArguments.integer(args, "limit", max, Integer.MAX_VALUE));
+        } catch (IllegalArgumentException e) {
+            return ToolResult.error(e.getMessage());
         }
         List<MemoryService.Match> matches = memory.recall(query, limit);
         if (matches.isEmpty()) {

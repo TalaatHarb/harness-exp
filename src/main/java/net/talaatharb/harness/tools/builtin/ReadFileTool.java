@@ -37,11 +37,16 @@ public class ReadFileTool implements Tool {
 
     @Override
     public ToolResult execute(Map<String, Object> arguments) throws IOException {
-        Object raw = arguments.get("path");
+        Object raw = arguments == null ? null : arguments.get("path");
         if (!(raw instanceof String) || ((String) raw).isBlank()) {
             return ToolResult.error("Missing required argument 'path'");
         }
-        Path path = Path.of((String) raw).toAbsolutePath().normalize();
+        Path path;
+        try {
+            path = Path.of((String) raw).toAbsolutePath().normalize();
+        } catch (java.nio.file.InvalidPathException e) {
+            return ToolResult.error("Invalid file path");
+        }
         if (!Files.isRegularFile(path)) {
             return ToolResult.error("Not a file: " + path);
         }

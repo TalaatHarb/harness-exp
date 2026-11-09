@@ -55,6 +55,25 @@ class MemoryImprovementsTest {
     }
 
     @Test
+    void ignoresUnusedOptionalFieldsButPreservesLiteralFactText() throws Exception {
+        try (MemoryService memory = service(MemorySettings.Backend.MARKDOWN)) {
+            RememberTool remember = new RememberTool(memory);
+            var args = new java.util.HashMap<String, Object>();
+            args.put("text", "default");
+            args.put("memory", null);
+            args.put("facts", List.of());
+            args.put("tags", "default");
+            args.put("replace_id", "null");
+            assertTrue(remember.execute(args).success());
+            assertEquals("default", memory.active().list().get(0).text);
+            assertTrue(memory.active().list().get(0).tags.isEmpty());
+            var recall = new RecallTool(memory);
+            assertTrue(recall.execute(Map.of("query", "default", "limit", "default")).success());
+            assertFalse(recall.execute(Map.of("limit", "NaN")).success());
+        }
+    }
+
+    @Test
     void validatesEntireBatchBeforeAnyWrites() throws Exception {
         try (MemoryService memory = service(MemorySettings.Backend.MARKDOWN)) {
             RememberTool tool = new RememberTool(memory);

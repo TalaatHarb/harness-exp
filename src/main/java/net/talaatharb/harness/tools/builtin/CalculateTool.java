@@ -6,6 +6,7 @@ import java.math.MathContext;
 import java.util.Map;
 
 import net.talaatharb.harness.tools.Tool;
+import net.talaatharb.harness.tools.ToolArguments;
 import net.talaatharb.harness.tools.ToolResult;
 
 /** Bounded arithmetic without evaluating model-supplied code. */
@@ -29,13 +30,13 @@ public class CalculateTool implements Tool {
             if (args == null) {
                 throw new IllegalArgumentException("Arguments are required");
             }
-            if (args.containsKey("expression")) {
+            if (!ToolArguments.omitted(args.get("expression"))) {
                 if (!(args.get("expression") instanceof String expression)) {
                     throw new IllegalArgumentException("expression must be a string");
                 }
                 return ToolResult.ok(new Expression(expression).evaluate().stripTrailingZeros().toPlainString());
             }
-            String operation = String.valueOf(args.get("operation"));
+            String operation = ToolArguments.string(args, "operation", null).strip().toLowerCase(java.util.Locale.ROOT);
             BigDecimal a = number(args.get("a"));
             if ("is_prime".equals(operation)) {
                 BigInteger n = a.toBigIntegerExact();
@@ -66,7 +67,7 @@ public class CalculateTool implements Tool {
     }
 
     private static BigDecimal number(Object value) {
-        String text = value == null ? "" : value.toString();
+        String text = value == null ? "" : value.toString().strip();
         if (text.isBlank() || text.length() > 100) {
             throw new IllegalArgumentException("Provide a number of at most 100 characters");
         }

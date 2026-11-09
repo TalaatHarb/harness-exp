@@ -78,7 +78,7 @@ class WriteBinaryFileToolTest {
             assertFalse(tool.execute(Map.of("path", "test.bin", "base64", "AA==", "sourcePath", "x")).success());
             assertFalse(tool.execute(Map.of("path", "test.bin", "base64", "!", "artifact", true)).success());
             assertFalse(tool.execute(Map.of("path", "../escape.bin", "base64", "AA==")).success());
-            assertFalse(tool.execute(Map.of("path", "test.bin", "base64", "AA==", "artifact", "true")).success());
+            assertFalse(tool.execute(Map.of("path", "test.bin", "base64", "AA==", "artifact", "maybe")).success());
             assertFalse(tool.execute(Map.of("path", "test.bin", "base64", "AA==", "append", true)).success());
             assertThrows(IOException.class, () -> tool.execute(Map.of("path", "test.bin",
                     "sourcePath", temp.resolve("missing.bin").toString())));
@@ -95,5 +95,6 @@ class WriteBinaryFileToolTest {
         } finally {
             ConversationScope.restore(previous);
         }
+
     }
 }

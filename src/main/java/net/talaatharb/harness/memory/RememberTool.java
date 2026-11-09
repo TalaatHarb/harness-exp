@@ -15,6 +15,7 @@ import com.google.inject.Inject;
 
 import net.talaatharb.harness.tools.RiskLevel;
 import net.talaatharb.harness.tools.Tool;
+import net.talaatharb.harness.tools.ToolArguments;
 import net.talaatharb.harness.tools.ToolResult;
 
 /** Saves approved facts to long-term memory. Batches are validated first, but writes are not transactional. */
@@ -123,8 +124,12 @@ public class RememberTool implements Tool {
             throw new IllegalArgumentException("Unknown remember argument; use text/memory or facts, tags, replace_id");
         }
         List<String> sharedTags = validatedTags(args.get("tags"));
-        if (args.containsKey("facts")) {
-            if (args.containsKey("text") || args.containsKey("memory") || args.containsKey("replace_id")) {
+        Object batch = args.get("facts");
+        boolean hasBatch = !ToolArguments.omitted(batch) && !(batch instanceof List<?> list && list.isEmpty());
+        boolean hasText = args.get("text") != null && !str(args.get("text")).isEmpty();
+        boolean hasMemory = args.get("memory") != null && !str(args.get("memory")).isEmpty();
+        if (hasBatch) {
+            if (hasText || hasMemory || !ToolArguments.omitted(args.get("replace_id"))) {
                 throw new IllegalArgumentException("Supply facts OR single text/memory with replace_id, not both");
             }
             if (!(args.get("facts") instanceof List<?> list) || list.isEmpty() || list.size() > MAX_FACTS) {
@@ -148,10 +153,10 @@ public class RememberTool implements Tool {
             }
             return facts;
         }
-        if (args.containsKey("text") && args.containsKey("memory")) {
+        if (hasText && hasMemory) {
             throw new IllegalArgumentException("Supply text or its memory alias, not both");
         }
-        return List.of(new Fact(validatedText(args.containsKey("text") ? args.get("text") : args.get("memory")),
+        return List.of(new Fact(validatedText(hasText ? args.get("text") : args.get("memory")),
                 sharedTags, optionalString(args.get("replace_id"), "replace_id")));
     }
 
@@ -166,10 +171,13 @@ public class RememberTool implements Tool {
         if (value != null && !(value instanceof String)) {
             throw new IllegalArgumentException(field + " must be a string");
         }
-        return str(value);
+        return ToolArguments.omitted(value) ? "" : str(value);
     }
 
     private static List<String> validatedTags(Object value) {
+        if (ToolArguments.omitted(value)) {
+            return List.of();
+        }
         if (value != null && !(value instanceof String) && !(value instanceof List<?>)) {
             throw new IllegalArgumentException("tags must be a string or an array of strings");
         }

@@ -24,6 +24,19 @@ class FileDiscoveryToolTest {
     }
 
     @Test
+    void placeholderControlsUseDefaults() throws Exception {
+        Files.writeString(temp.resolve("note.txt"), "hello");
+        var args = new java.util.HashMap<String, Object>();
+        args.put("path", temp.toString());
+        args.put("operation", "default");
+        args.put("glob", null);
+        args.put("maxResults", "default");
+        args.put("maxDepth", "");
+        args.put("includeHidden", "false");
+        assertEquals(1, run(args).path("results").size());
+    }
+
+    @Test
     void listsMetadataAndFindsNamesWithinTheDepthLimit() throws Exception {
         Path nested = Files.createDirectories(temp.resolve("nested"));
         Files.writeString(nested.resolve("note.txt"), "hello");
