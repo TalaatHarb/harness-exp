@@ -24,20 +24,22 @@ import com.google.inject.name.Named;
  * Speech to text with Cactus Compute's <a href="https://huggingface.co/Cactus-Compute/whistle">Whistle</a>
  * (16.9 MB {@code whistle.cact}, Apache 2.0), as in <a href="https://github.com/TalaatHarb/stt-tts">stt-tts</a>.
  * <p>
- * The model runs on Cactus' prebuilt {@code needle} engine executable for the current OS/CPU, called as a
- * subprocess. Engine and model are downloaded from Hugging Face on first use into {@code <models>/whistle}.
+ * The model runs on the prebuilt {@code cactus} runtime executable for the current OS/CPU (pinned release
+ * {@value CactusPlatform#RELEASE} of <a href="https://huggingface.co/Cactus-Compute/cactus">Cactus-Compute/cactus</a>,
+ * checksum-verified), called as a subprocess. Runtime and model are downloaded from Hugging Face on first use into
+ * {@code <models>/whistle}.
  */
 @Singleton
 public class WhistleSpeechToText implements SpeechToText {
     public static final String MODELS_DIR = "modelsDir";
-    static final String ENGINE_REPO = "Cactus-Compute/needle3";
+    static final String ENGINE_REPO = "Cactus-Compute/cactus";
     static final String MODEL_REPO = "Cactus-Compute/whistle";
     static final int SAMPLE_RATE = 16_000;
     private static final Logger LOG = LoggerFactory.getLogger(WhistleSpeechToText.class);
 
     private final ModelDownloader downloader;
     private final Path directory;
-    private final NeedlePlatform platform;
+    private final CactusPlatform platform;
     private final ObjectMapper json = new ObjectMapper();
 
     @Inject
@@ -45,15 +47,15 @@ public class WhistleSpeechToText implements SpeechToText {
         this(modelsDir, downloader, detect());
     }
 
-    WhistleSpeechToText(Path modelsDir, ModelDownloader downloader, NeedlePlatform platform) {
+    WhistleSpeechToText(Path modelsDir, ModelDownloader downloader, CactusPlatform platform) {
         this.downloader = downloader;
         this.directory = modelsDir.resolve("whistle");
         this.platform = platform;
     }
 
-    private static NeedlePlatform detect() {
+    private static CactusPlatform detect() {
         try {
-            return NeedlePlatform.current();
+            return CactusPlatform.current();
         } catch (UnsupportedOperationException e) {
             LOG.warn(e.getMessage());
             return null;
@@ -79,10 +81,11 @@ public class WhistleSpeechToText implements SpeechToText {
     }
 
     Path engineFile() {
-        return directory.resolve(requirePlatform().folder()).resolve(requirePlatform().executable());
+        return directory.resolve("cactus-" + CactusPlatform.RELEASE).resolve(requirePlatform().folder())
+                .resolve(requirePlatform().executable());
     }
 
-    private NeedlePlatform requirePlatform() {
+    private CactusPlatform requirePlatform() {
         if (platform == null) {
             throw new IllegalStateException("Speech to text (Whistle) isn't available for "
                     + System.getProperty("os.name") + " / " + System.getProperty("os.arch"));
@@ -91,7 +94,9 @@ public class WhistleSpeechToText implements SpeechToText {
     }
 
     private List<ModelDownloader.RemoteFile> files() {
-        return List.of(new ModelDownloader.RemoteFile(ENGINE_REPO, requirePlatform().remotePath(), engineFile()),
+        CactusPlatform engine = requirePlatform();
+        return List.of(new ModelDownloader.RemoteFile(ENGINE_REPO, CactusPlatform.REVISION, engine.remotePath(),
+                engineFile(), engine.sha256()),
                 new ModelDownloader.RemoteFile(MODEL_REPO, "whistle.cact", modelFile()));
     }
 
@@ -105,7 +110,7 @@ public class WhistleSpeechToText implements SpeechToText {
         downloader.ensure(files(), progress);
         Path engine = engineFile();
         if (!engine.toFile().canExecute() && !engine.toFile().setExecutable(true)) {
-            throw new IOException("Could not mark the Whistle engine as executable: " + engine);
+            throw new IOException("Could not mark the Cactus runtime as executable: " + engine);
         }
     }
 

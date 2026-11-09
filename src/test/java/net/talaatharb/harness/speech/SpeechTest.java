@@ -13,8 +13,10 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -26,17 +28,29 @@ import net.talaatharb.harness.llm.Attachment;
 import net.talaatharb.harness.llm.ChatMessage;
 
 class SpeechTest {
-    private static final NeedlePlatform WINDOWS = NeedlePlatform.detect("Windows 11", "amd64");
+    private static final CactusPlatform WINDOWS = CactusPlatform.detect("Windows 11", "amd64");
 
     @TempDir
     Path dir;
 
     @Test
     void detectsEnginePlatforms() {
-        assertEquals("windows-x86_64/needle.exe", WINDOWS.remotePath());
-        assertEquals("macos-arm64/needle", NeedlePlatform.detect("Mac OS X", "aarch64").remotePath());
-        assertEquals("linux-armv7/needle", NeedlePlatform.detect("Linux", "armv7l").remotePath());
-        assertThrows(UnsupportedOperationException.class, () -> NeedlePlatform.detect("Mac OS X", "x86_64"));
+        assertEquals("releases/4.1.0/windows-x86_64/cactus.exe", WINDOWS.remotePath());
+        assertEquals("releases/4.1.0/macos-arm64/cactus", CactusPlatform.detect("Mac OS X", "aarch64").remotePath());
+        assertEquals("releases/4.1.0/linux-armv7/cactus", CactusPlatform.detect("Linux", "armv7l").remotePath());
+        assertEquals("releases/4.1.0/linux-mipsel/cactus", CactusPlatform.detect("Linux", "mipsel").remotePath());
+        assertThrows(UnsupportedOperationException.class, () -> CactusPlatform.detect("Mac OS X", "x86_64"));
+        assertThrows(UnsupportedOperationException.class, () -> CactusPlatform.detect("Windows 11", "x86"));
+    }
+
+    @Test
+    void enginePinsTheCactusReleaseRevision() {
+        ModelDownloader downloader = new ModelDownloader("https://hf.example/");
+        WhistleSpeechToText whistle = new WhistleSpeechToText(dir, downloader, WINDOWS);
+        assertEquals(dir.resolve("whistle/cactus-4.1.0/windows-x86_64/cactus.exe"), whistle.engineFile());
+        assertEquals("https://hf.example/Cactus-Compute/cactus/resolve/v4.1.0/releases/4.1.0/windows-x86_64/cactus.exe",
+                downloader.url(new ModelDownloader.RemoteFile(WhistleSpeechToText.ENGINE_REPO, CactusPlatform.REVISION,
+                        WINDOWS.remotePath(), whistle.engineFile(), WINDOWS.sha256())));
     }
 
     @Test
@@ -89,7 +103,8 @@ class SpeechTest {
         WhistleSpeechToText whistle = new WhistleSpeechToText(dir, new ModelDownloader("http://unused"), WINDOWS);
         Path wav = dir.resolve("in.wav");
         List<String> auto = whistle.command(wav, SpeechSettings.AUTO);
-        assertEquals(List.of(dir.resolve("whistle").resolve("windows-x86_64").resolve("needle.exe").toString(),
+        assertEquals(List.of(dir.resolve("whistle").resolve("cactus-4.1.0").resolve("windows-x86_64")
+                .resolve("cactus.exe").toString(),
                 "--model", dir.resolve("whistle").resolve("whistle.cact").toString(), "--audio", wav.toString()),
                 auto);
         assertEquals(List.of("--audio-language", "de"), whistle.command(wav, "de").subList(5, 7));
@@ -110,7 +125,7 @@ class SpeechTest {
     }
 
     @Test
-    void downloadsMissingFilesOnlyOnce() throws IOException {
+    void downloadsMissingFilesOnlyOnce() throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         List<String> requested = new ArrayList<>();
         server.createContext("/", ex -> {
@@ -127,16 +142,30 @@ class SpeechTest {
         server.start();
         try {
             ModelDownloader downloader = new ModelDownloader("http://127.0.0.1:" + server.getAddress().getPort() + "/");
-            Path engine = dir.resolve("whistle/windows-x86_64/needle.exe");
-            var files = List.of(new ModelDownloader.RemoteFile("Org/needle", "windows-x86_64/needle.exe", engine),
+            Path engine = dir.resolve("whistle/cactus-4.1.0/windows-x86_64/cactus.exe");
+            String enginePath = "/Org/cactus/resolve/v4.1.0/releases/4.1.0/windows-x86_64/cactus.exe";
+            String engineSha = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(enginePath.getBytes(StandardCharsets.UTF_8)));
+            var files = List.of(
+                    new ModelDownloader.RemoteFile("Org/cactus", "v4.1.0", "releases/4.1.0/windows-x86_64/cactus.exe",
+                            engine, engineSha.toUpperCase()),
                     new ModelDownloader.RemoteFile("Org/whistle", "whistle.cact", dir.resolve("whistle/whistle.cact")));
             List<Double> fractions = new ArrayList<>();
             downloader.ensure(files, (m, f) -> fractions.add(f));
             assertTrue(ModelDownloader.allPresent(files));
-            assertEquals("/Org/needle/resolve/main/windows-x86_64/needle.exe", Files.readString(engine));
+            assertEquals(enginePath, Files.readString(engine));
+            assertEquals("/Org/whistle/resolve/main/whistle.cact", Files.readString(dir.resolve("whistle/whistle.cact")));
             assertFalse(fractions.isEmpty());
             downloader.ensure(files, ProgressListener.NONE);
             assertEquals(2, requested.size());
+
+            Path tampered = dir.resolve("tampered");
+            IOException mismatch = assertThrows(IOException.class, () -> downloader.ensure(
+                    List.of(new ModelDownloader.RemoteFile("Org/x", "v1", "tampered", tampered, "00".repeat(32))),
+                    ProgressListener.NONE));
+            assertTrue(mismatch.getMessage().contains("Checksum mismatch"), mismatch.getMessage());
+            assertFalse(Files.exists(tampered));
+            assertFalse(Files.exists(dir.resolve("tampered.part")));
 
             Path target = dir.resolve("missing");
             assertThrows(IOException.class, () -> downloader.ensure(

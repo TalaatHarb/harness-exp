@@ -250,9 +250,13 @@ the full-size image.
 
 Speech to text runs **on your machine** with [Whistle](https://huggingface.co/Cactus-Compute/whistle) by Cactus
 Compute (Apache 2.0), following [stt-tts](https://github.com/TalaatHarb/stt-tts) (package `speech`). The 16.9 MB model
-and the prebuilt `needle` engine for your OS (Windows x64/arm64, macOS arm64, Linux x64/arm64/armv7/riscv64) are
-downloaded from Hugging Face on first use, or with **Download model now** in the Speech section, into
-`<models folder>/whistle` (default `~/.harness-exp/models`). No audio is sent to a cloud service.
+and the prebuilt `cactus` runtime (`cactus.exe` on Windows) for your OS (Windows x64/arm64, macOS arm64, Linux
+x64/arm64/armv7/riscv64/mipsel) are downloaded from Hugging Face on first use, or with **Download model now** in the
+Speech section, into `<models folder>/whistle` (default `~/.harness-exp/models`). The runtime comes from the pinned
+release **4.1.0** of [Cactus-Compute/cactus](https://huggingface.co/Cactus-Compute/cactus) (tag `v4.1.0`,
+`releases/4.1.0/<platform>/`) and is rejected unless its SHA-256 matches that release's manifest. It is stored in
+`whistle/cactus-4.1.0/<platform>/`, so an older `needle` engine folder can be deleted. No audio is sent to a cloud
+service.
 
 - **Talk instead of typing**: click **🎤** or press **Ctrl+M** anywhere in the window to start recording, then press
   it again to stop (**Esc** cancels). The status line shows the time and input level. The transcript is inserted at
