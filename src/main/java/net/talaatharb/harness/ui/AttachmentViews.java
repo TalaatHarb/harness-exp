@@ -174,9 +174,8 @@ public final class AttachmentViews {
     }
 
     private static void toggle(Attachment a, Button button) {
-        boolean wasThis = playing == button;
-        stop();
-        if (wasThis) {
+        if (playing == button) {
+            stop();
             return;
         }
         try {
@@ -184,18 +183,34 @@ public final class AttachmentViews {
             Path file = Files.createTempFile("harness-audio-", ext.toLowerCase(Locale.ROOT));
             file.toFile().deleteOnExit();
             Files.write(file, a.bytes());
+            toggleFile(file, a.name(), button);
+        } catch (IOException | RuntimeException ex) {
+            LOG.error("Can't play {}", a.name(), ex);
+            button.setTooltip(new Tooltip("Can't play this format here: " + ex.getMessage()));
+            stop();
+        }
+    }
+
+    /** Plays a local audio file, or stops it if {@code button} is already playing; one clip plays at a time. */
+    static void toggleFile(Path file, String name, Button button) {
+        boolean wasThis = playing == button;
+        stop();
+        if (wasThis) {
+            return;
+        }
+        try {
             player = new MediaPlayer(new Media(file.toUri().toString()));
             playing = button;
             button.setText("■");
             player.setOnEndOfMedia(AttachmentViews::stop);
             player.setOnError(() -> {
-                LOG.error("Can't play {}: {}", a.name(), player.getError() == null ? "" : player.getError().getMessage());
+                LOG.error("Can't play {}: {}", name, player.getError() == null ? "" : player.getError().getMessage());
                 button.setTooltip(new Tooltip("Can't play this format here"));
                 stop();
             });
             player.play();
-        } catch (IOException | RuntimeException ex) {
-            LOG.error("Can't play {}", a.name(), ex);
+        } catch (RuntimeException ex) {
+            LOG.error("Can't play {}", name, ex);
             button.setTooltip(new Tooltip("Can't play this format here: " + ex.getMessage()));
             stop();
         }

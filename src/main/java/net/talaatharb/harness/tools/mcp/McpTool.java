@@ -7,6 +7,7 @@ import java.util.function.Supplier;
 import net.talaatharb.harness.tools.RiskLevel;
 import net.talaatharb.harness.tools.Tool;
 import net.talaatharb.harness.tools.ToolResult;
+import net.talaatharb.harness.history.ArtifactStore;
 
 /** Exposes a tool of a connected MCP server as a harness {@link Tool}. */
 final class McpTool implements Tool {
@@ -16,12 +17,18 @@ final class McpTool implements Tool {
     private final McpClient client;
     private final McpClient.ToolInfo info;
     private final Supplier<Duration> timeout;
+    private final ArtifactStore artifacts;
 
     McpTool(String name, McpClient client, McpClient.ToolInfo info, Supplier<Duration> timeout) {
+        this(name, client, info, timeout, null);
+    }
+
+    McpTool(String name, McpClient client, McpClient.ToolInfo info, Supplier<Duration> timeout, ArtifactStore artifacts) {
         this.name = name;
         this.client = client;
         this.info = info;
         this.timeout = timeout;
+        this.artifacts = artifacts;
     }
 
     @Override
@@ -68,6 +75,6 @@ final class McpTool implements Tool {
             return ToolResult.error("MCP server '" + client.config().name + "' is disconnected: "
                     + client.transport().closedReason() + ". Reconnect it in Harness → Tools & MCP.");
         }
-        return client.callTool(info.name(), arguments, timeout.get());
+        return client.callTool(info.name(), arguments, timeout.get(), artifacts);
     }
 }

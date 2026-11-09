@@ -17,6 +17,11 @@ import javafx.scene.control.Tooltip;
 import javafx.scene.control.TitledPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.layout.VBox;
+import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonType;
+import javafx.stage.FileChooser;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import net.talaatharb.harness.history.ArtifactStore;
 import net.talaatharb.harness.agent.AgentRunResult;
 import net.talaatharb.harness.llm.ChatMessage;
 import net.talaatharb.harness.llm.Role;
@@ -43,6 +48,14 @@ class AssistantTurnView {
     private final List<Node[]> markdownBubbles = new ArrayList<>();
     private boolean receivedTokens;
     private net.talaatharb.harness.trace.RunTimeline timeline;
+    private ArtifactStore artifacts;
+    private String conversationId;
+    private final java.util.Set<String> shownArtifacts = new java.util.HashSet<>();
+
+    void setArtifacts(ArtifactStore artifacts, String conversationId) {
+        this.artifacts = artifacts;
+        this.conversationId = conversationId;
+    }
 
     AssistantTurnView(ReplySettings settings, Consumer<String> actionSink, Runnable onRegenerate) {
         this(settings, actionSink, onRegenerate, new SimpleBooleanProperty(settings.allowImages));
@@ -123,6 +136,10 @@ class AssistantTurnView {
 
     private void outcome(String name, boolean success, String output) {
         String out = output == null ? "" : output;
+        if (success && artifacts != null) {
+            out.lines().filter(line -> line.startsWith(ArtifactStore.ARTIFACT_PREFIX))
+                    .forEach(line -> showArtifact(line.substring(ArtifactStore.ARTIFACT_PREFIX.length())));
+        }
         boolean denied = !success && (out.startsWith("The user denied this tool call")
                 || out.startsWith("Tool call blocked by guardrails") || out.startsWith("Tool call aborted"));
         String status = success ? "Succeeded" : denied ? "Denied" : "Failed";
@@ -136,6 +153,50 @@ class AssistantTurnView {
         pane.setExpanded(success && "remember".equals(name));
         pane.getStyleClass().addAll("tool-outcome", success ? "trace-ok" : "trace-error");
         addBeforeStream(pane);
+    }
+
+    private void showArtifact(String json) {
+        try {
+            ArtifactStore.Artifact artifact = new ObjectMapper().readValue(json, ArtifactStore.Artifact.class);
+            // Never offer paths supplied by model text: resolve only managed files in this conversation.
+            java.nio.file.Path file = artifacts.file(conversationId, artifact);
+            if (!shownArtifacts.add(artifact.id())) {
+                return;
+            }
+            Button save = new Button("Save as…");
+            save.getStyleClass().add("artifact-save");
+            save.setOnAction(e -> {
+                FileChooser chooser = new FileChooser();
+                chooser.setTitle("Save " + artifact.name());
+                chooser.setInitialFileName(artifact.name());
+                var destination = chooser.showSaveDialog(root.getScene().getWindow());
+                if (destination != null) {
+                    try {
+                        artifacts.saveAs(conversationId, artifact, destination.toPath());
+                    } catch (java.io.IOException | RuntimeException failure) {
+                        LOG.error("Could not save artifact {}", artifact.id(), failure);
+                        Alert alert = new Alert(Alert.AlertType.ERROR, failure.getMessage(), ButtonType.OK);
+                        alert.setHeaderText("Save file failed");
+                        alert.initOwner(root.getScene().getWindow());
+                        alert.showAndWait();
+                    }
+                }
+            });
+            List<Node> row = new ArrayList<>(List.of(new Label("File · " + artifact.name())));
+            Button play = ArtifactPreview.playButton(file, artifact.name());
+            if (play != null) {
+                row.add(play);
+            }
+            row.add(save);
+            addBeforeStream(ChatBubbles.actionBar(Pos.CENTER_LEFT, row.toArray(Node[]::new)));
+            Node preview = ArtifactPreview.preview(file, artifact.name());
+            if (preview != null) {
+                addBeforeStream(preview);
+            }
+        } catch (java.io.IOException | RuntimeException e) {
+            LOG.warn("Could not load conversation artifact", e);
+            notice("Downloadable file unavailable: " + e.getMessage());
+        }
     }
 
     void showContext(List<ChatMessage> messages) {
@@ -221,12 +282,27 @@ class AssistantTurnView {
             return raw;
         }
         try {
-            Node markdown = new ChatMarkdownView(text, imagesAllowed, UiSupport::confirmOpenLink);
+            Node markdown = new ChatMarkdownView(text, imagesAllowed, UiSupport::confirmOpenLink, this::localArtifact);
             markdownBubbles.add(new Node[] { markdown, raw });
             return markdown;
         } catch (RuntimeException | LinkageError e) {
             LOG.error("Markdown rendering failed; showing raw text", e);
             return raw;
+        }
+    }
+
+    /** Resolves a Markdown image reference such as {@code mcp-image-2.png} to this conversation's artifact. */
+    private java.util.Optional<java.nio.file.Path> localArtifact(String reference) {
+        if (artifacts == null || reference == null) {
+            return java.util.Optional.empty();
+        }
+        String name = reference.strip();
+        name = name.startsWith("./") ? name.substring(2) : name.startsWith("artifact:") ? name.substring(9) : name;
+        try {
+            return artifacts.findByName(conversationId, name);
+        } catch (java.io.IOException | RuntimeException e) {
+            LOG.warn("Could not resolve artifact reference {}", reference, e);
+            return java.util.Optional.empty();
         }
     }
 

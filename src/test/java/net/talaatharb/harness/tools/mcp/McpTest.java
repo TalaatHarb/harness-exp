@@ -137,6 +137,84 @@ class McpTest {
     }
 
     @Test
+    void capturesBinaryResultsFromConnectedMcpToolsWithoutPassingPayloadToModel() throws Exception {
+        var artifacts = new net.talaatharb.harness.history.ArtifactStore(dir.resolve("history.db"));
+        SettingsStore store = new SettingsStore(dir.resolve("settings.json"));
+        HarnessSettings settings = store.copy();
+        settings.tools.toolsEnabled = true;
+        settings.tools.mcpServers = new ArrayList<>(List.of(
+                new McpServerConfig("media", McpServerConfig.Transport.STDIO, fakeServerCommand(), "", true)));
+        store.replace(settings);
+        String png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j4WQAAAAASUVORK5CYII=";
+        byte[] wav = net.talaatharb.harness.speech.WavIO.toWavBytes(
+                new net.talaatharb.harness.speech.AudioClip(new float[] { 0, 0.5f }, 16000));
+        var content = JSON.createArrayNode();
+        content.addObject().put("type", "text").put("text", "Created media");
+        content.addObject().put("type", "image").put("mimeType", "image/png").put("data", png);
+        content.addObject().put("type", "audio").put("mimeType", "audio/wav")
+                .put("data", java.util.Base64.getEncoder().encodeToString(wav));
+        content.addObject().put("type", "resource").putObject("resource")
+                .put("uri", "file:///server/custom.bin").put("mimeType", "application/octet-stream").put("blob", "AP+A");
+        try (McpClientManager manager = new McpClientManager(store, k -> null, artifacts)) {
+            await(() -> manager.status(settings.tools.mcpServers.get(0)).startsWith("connected"));
+            var echo = manager.tools(settings.tools.mcpServers).get(0);
+            String previous = net.talaatharb.harness.agent.ConversationScope.enter("conversation");
+            try {
+                ToolResult result = echo.execute(Map.of("content", content));
+                assertTrue(result.success(), result.output());
+                assertTrue(result.output().startsWith("Created media\n"));
+                assertFalse(result.output().contains(png));
+                List<net.talaatharb.harness.history.ArtifactStore.Artifact> files = new ArrayList<>();
+                for (String line : result.output().lines().toList()) {
+                    if (line.startsWith(net.talaatharb.harness.history.ArtifactStore.ARTIFACT_PREFIX)) {
+                        files.add(JSON.readValue(line.substring(net.talaatharb.harness.history.ArtifactStore.ARTIFACT_PREFIX.length()),
+                                net.talaatharb.harness.history.ArtifactStore.Artifact.class));
+                    }
+                }
+                assertEquals(List.of("mcp-image-2.png", "mcp-audio-3.wav", "mcp-resource-4.bin"),
+                        files.stream().map(net.talaatharb.harness.history.ArtifactStore.Artifact::name).toList());
+                assertTrue(new net.talaatharb.harness.history.ArtifactStore(dir.resolve("history.db"))
+                        .file("conversation", files.get(0)).toFile().isFile());
+                assertTrue(java.util.Arrays.equals(java.util.Base64.getDecoder().decode(png),
+                        java.nio.file.Files.readAllBytes(artifacts.file("conversation", files.get(0)))));
+                assertTrue(java.util.Arrays.equals(wav, java.nio.file.Files.readAllBytes(artifacts.file("conversation", files.get(1)))));
+                assertTrue(java.util.Arrays.equals(new byte[] { 0, (byte) 255, (byte) 128 },
+                        java.nio.file.Files.readAllBytes(artifacts.file("conversation", files.get(2)))));
+                ToolResult failed = manager.tools(settings.tools.mcpServers).get(1).execute(Map.of("content", content));
+                assertFalse(failed.success());
+                assertFalse(failed.output().contains(net.talaatharb.harness.history.ArtifactStore.ARTIFACT_PREFIX));
+                Path owned = artifacts.file("conversation", files.get(0));
+                artifacts.deleteConversation("conversation");
+                assertFalse(java.nio.file.Files.exists(owned));
+            } finally {
+                net.talaatharb.harness.agent.ConversationScope.restore(previous);
+            }
+        }
+    }
+
+    @Test
+    void reportsMalformedMcpBinaryDataAndMissingConversation() throws Exception {
+        var artifacts = new net.talaatharb.harness.history.ArtifactStore(dir.resolve("history.db"));
+        JsonNode invalid = JSON.readTree("""
+                {"content":[{"type":"image","mimeType":"image/png","data":"not base64!"}]}
+                """);
+        assertThrows(IOException.class, () -> McpClient.formatContent(invalid, artifacts, "conversation"));
+        JsonNode missing = JSON.readTree("""
+                {"content":[{"type":"audio","mimeType":"audio/wav"}]}
+                """);
+        assertThrows(IOException.class, () -> McpClient.formatContent(missing, artifacts, "conversation"));
+        JsonNode valid = JSON.readTree("""
+                {"content":[{"type":"image","mimeType":"image/png","data":"AAAA"}]}
+                """);
+        assertThrows(IOException.class, () -> McpClient.formatContent(valid, artifacts, null));
+        String link = McpClient.formatContent(JSON.readTree("""
+                {"content":[{"type":"resource_link","uri":"https://example.com/audio.wav"}]}
+                """), artifacts, "conversation");
+        assertEquals("[resource link: https://example.com/audio.wav]", link);
+        assertFalse(java.nio.file.Files.exists(dir.resolve("history.db.artifacts")));
+    }
+
+    @Test
     void talksToAStdioServer() throws Exception {
         McpServerConfig config = new McpServerConfig("fake", McpServerConfig.Transport.STDIO, fakeServerCommand(), "",
                 true, Map.of("FAKE_MCP_VALUE", "${SECRET}"));

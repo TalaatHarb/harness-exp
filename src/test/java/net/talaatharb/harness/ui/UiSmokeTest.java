@@ -211,6 +211,62 @@ class UiSmokeTest {
     }
 
     @Test
+    void downloadableFilesAppearLiveAndWhenReplayingWithoutToolTrace() throws Exception {
+        var directory = java.nio.file.Files.createTempDirectory("harness-artifact-ui");
+        var artifacts = new net.talaatharb.harness.history.ArtifactStore(directory.resolve("history.db"));
+        var artifact = artifacts.write("conversation", "story.md", "# Story\nOnce upon a time.");
+        String output = net.talaatharb.harness.tools.builtin.WriteFileTool.ARTIFACT_PREFIX
+                + new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(artifact);
+        var binary = artifacts.writeBinary("conversation", "image.png", new byte[] { 0, (byte) 255 });
+        String binaryOutput = net.talaatharb.harness.history.ArtifactStore.ARTIFACT_PREFIX
+                + new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(binary);
+        var audio = artifacts.writeBinary("conversation", "speech.wav", new byte[] { 1, 2 });
+        String audioOutput = net.talaatharb.harness.history.ArtifactStore.ARTIFACT_PREFIX
+                + new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(audio);
+        try {
+            fx(() -> {
+                ReplySettings settings = new ReplySettings();
+                settings.showToolTrace = false;
+                AssistantTurnView live = new AssistantTurnView(settings, s -> {}, null);
+                live.setArtifacts(artifacts, "conversation");
+                live.toolResult(new ToolCall("write_file", Map.of()), net.talaatharb.harness.tools.ToolResult.ok(output));
+                live.toolResult(new ToolCall("write_binary_file", Map.of()),
+                        net.talaatharb.harness.tools.ToolResult.ok(binaryOutput));
+                assertTrue(labels(live.root()).contains("File · story.md"));
+                assertTrue(labels(live.root()).contains("File · image.png"));
+                assertEquals(2, nodes(live.root()).stream().filter(Button.class::isInstance)
+                        .filter(b -> b.getStyleClass().contains("artifact-save")).count());
+                assertTrue(nodes(live.root()).stream().filter(TitledPane.class::isInstance)
+                        .anyMatch(p -> ((TitledPane) p).getText().equals("Preview · story.md")));
+                assertEquals(2, nodes(live.root()).stream()
+                        .filter(n -> n.getStyleClass().contains("artifact-preview")).count());
+                live.toolResult(new ToolCall("synthesize", Map.of()),
+                        net.talaatharb.harness.tools.ToolResult.ok(audioOutput));
+                assertEquals(1, nodes(live.root()).stream()
+                        .filter(n -> n.getStyleClass().contains("artifact-play")).count());
+                live.finish(new AgentRunResult(AgentRunResult.Status.COMPLETED,
+                        "Here it is: ![generated](image.png) and ![missing](other.png)", null, 1, 1));
+                assertEquals(3, nodes(live.root()).stream()
+                        .filter(n -> n.getStyleClass().contains("artifact-preview")).count());
+                AssistantTurnView replay = new AssistantTurnView(settings, s -> {}, null);
+                replay.setArtifacts(artifacts, "conversation");
+                replay.replay(ChatMessage.tool("generate_media",
+                        "Result of tool `generate_media` (success):\nCreated files\n" + output + "\n" + binaryOutput));
+                assertTrue(labels(replay.root()).contains("File · story.md"));
+                assertTrue(labels(replay.root()).contains("File · image.png"));
+                AssistantTurnView failed = new AssistantTurnView(settings, s -> {}, null);
+                failed.setArtifacts(artifacts, "conversation");
+                failed.toolResult(new ToolCall("write_file", Map.of()), net.talaatharb.harness.tools.ToolResult.error(output));
+                assertFalse(labels(failed.root()).contains("File · story.md"));
+            });
+        } finally {
+            artifacts.deleteConversation("conversation");
+            java.nio.file.Files.delete(directory.resolve("history.db.artifacts"));
+            java.nio.file.Files.delete(directory);
+        }
+    }
+
+    @Test
     void outcomesPersistWithTraceOffIncludingFullSavedMemory() throws Exception {
         fx(() -> {
             ReplySettings settings = new ReplySettings();

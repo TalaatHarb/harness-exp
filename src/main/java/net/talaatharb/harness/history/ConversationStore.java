@@ -43,14 +43,21 @@ public class ConversationStore implements AutoCloseable {
     private final HTreeMap<String, String> index;
     private final boolean persistent;
     private final SettingsStore settings;
+    private final ArtifactStore artifacts;
+    private final java.util.Set<String> deleted = new java.util.HashSet<>();
 
     public ConversationStore(@Named(DB_PATH) Path path) {
         this(path, new SettingsStore(null));
     }
 
-    @Inject
     public ConversationStore(@Named(DB_PATH) Path path, SettingsStore settings) {
+        this(path, settings, new ArtifactStore(path));
+    }
+
+    @Inject
+    public ConversationStore(@Named(DB_PATH) Path path, SettingsStore settings, ArtifactStore artifacts) {
         this.settings = settings;
+        this.artifacts = artifacts;
         DB opened = open(path);
         persistent = opened != null;
         db = opened != null ? opened : DBMaker.memoryDB().make();
@@ -92,6 +99,9 @@ public class ConversationStore implements AutoCloseable {
     }
 
     public synchronized void save(ConversationRecord record) {
+        if (deleted.contains(record.id)) {
+            throw new IllegalStateException("Cannot save deleted conversation " + record.id);
+        }
         record.updatedAt = Instant.now();
         if (record.title == null || record.title.isBlank()) {
             record.title = record.turns.isEmpty() ? "Untitled" : ConversationRecord.titleFor(firstRequest(record));
@@ -194,10 +204,20 @@ public class ConversationStore implements AutoCloseable {
     }
 
     public synchronized boolean delete(String id) {
+        try {
+            artifacts.deleteConversation(id);
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not delete artifacts of conversation " + id, e);
+        }
         boolean removed = conversations.remove(id) != null;
         index.remove(id);
         db.commit();
+        deleted.add(id);
         return removed;
+    }
+
+    public ArtifactStore artifacts() {
+        return artifacts;
     }
 
     @Override

@@ -166,7 +166,8 @@ so it can retry (bounded by the iteration limit).
 
 | Tool | Risk | What it does |
 |---|---|---|
-| `write_file` | sensitive | Writes (or appends with `append: true`) UTF-8 `content` to `path`, creating parent folders. Up to 1,000,000 characters |
+| `write_file` | sensitive | Writes (or appends with `append: true`) UTF-8 `content` to `path`, creating parent folders. Use `artifact: true` and a plain filename for a downloadable conversation file (no append). Up to 1,000,000 characters |
+| `write_binary_file` | sensitive | Saves binary data from exactly one of `base64` or `sourcePath` (an existing local file). Defaults to a downloadable artifact; `artifact: false` writes to an ordinary path. No append; up to 20 MiB per file |
 | `run_native_shell` | dangerous | Runs `command` in PowerShell (Windows) or bash/sh (elsewhere), optional `workingDirectory` and `timeoutSeconds` (default 60, max 600). Returns exit code and combined output (20KB cap) |
 | `run_python_code` | dangerous | Runs `code` with `python3`/`python`/`py`; same options and limits as the shell tool |
 | `ask_user_for_decision` | safe | Opens a window with a `question`, optional `options` and optional `inputLabel`. Exactly two options without input show two large buttons; no options shows only the labelled input; anything else shows a radio list with the optional input |
@@ -174,6 +175,57 @@ so it can retry (bounded by the iteration limit).
 Dangerous tools need approval on every call and run **without a sandbox**; timeouts kill the process tree.
 PowerShell output is UTF-8 and runs with `$ErrorActionPreference = 'Stop'`, so a cmdlet error cannot be
 hidden by a later successful command. Invalid timeout or working-directory argument types return errors.
+
+### Downloadable response files
+
+Ask, for example, **"Write me a story in a .txt file"** or **"Give me this report as a .md file"**.
+With `write_file` enabled, its instructions tell the model to create an artifact using
+`{"path":"story.txt","content":"Once upon a time…","artifact":true}`. The normal sensitive-tool approval
+policy still applies. A successful write shows a **Save as…** button in the chat, even with tool traces hidden.
+The button also works after reopening a saved conversation; it copies the file to a location you choose.
+
+Artifacts live in `<history database path>.artifacts`, separated by conversation and file ID, so storage
+overrides isolate them too. Deleting a conversation deletes its managed files, **not** copies saved elsewhere.
+Artifact paths must be plain filenames; ordinary `write_file` calls without `artifact: true` keep their
+existing filesystem behavior and are not deleted with the conversation. Like other tool use, a small model
+may need a reminder to call `write_file` rather than just describe a file.
+
+For images, audio and other binary files, use **`write_binary_file`**, not the UTF-8 text writer:
+`{"path":"image.png","base64":"<standard Base64 bytes>","artifact":true}` or
+`{"path":"audio.wav","sourcePath":"<existing local file>","artifact":true}`.
+The local-file option copies the bytes without changing the source and avoids passing large Base64 through the
+model. Input validation rejects malformed Base64, data-URL prefixes, ambiguous sources and files over 20 MiB.
+Saving bytes does not convert formats: the extension should match the supplied data.
+
+Inline MCP **image**, **audio** and **binary resource (`blob`)** content is automatically preserved as conversation
+artifacts after a successful tool call. The chat shows the same **Save as…** buttons, while the model receives
+compact file references instead of binary payloads. Known MIME types get matching extensions; unknown types use
+`.bin`. Capture failures are reported as tool failures, and MCP error results are not published as files.
+MCP `resource_link` blocks and URLs are not fetched automatically; a server-provided filesystem path can be
+imported only if it refers to a file accessible on this machine. All managed binary copies share the same
+conversation-deletion behavior. The binary writer retains sensitive-tool approval; automatic MCP capture
+uses the existing MCP tool's approval policy.
+
+For example, a local text-to-speech MCP server's `synthesize` tool returns WAV audio. The harness saves it as
+`mcp-audio-2.wav` and shows an inline play/stop button alongside **Save as…**:
+
+![MCP text-to-speech tool call with inline WAV playback and Save as](img/MCPToolCallAudio.PNG)
+
+An image-generation MCP server's `generate_image` tool works the same way. The PNG becomes `mcp-image-2.png`, which
+is previewed inline beneath the file row and can also be saved with **Save as…**:
+
+![MCP image-generation tool call with an inline PNG preview and Save as](img/MCPToolCallImage.PNG)
+
+Artifacts are previewed inline from the conversation's local artifacts folder, so nothing is downloaded elsewhere
+until you choose **Save as…**:
+
+- **Images** (PNG, JPEG, GIF, BMP) show as thumbnails; click one to open it at full size.
+- **Audio** (WAV, MP3, M4A, AAC, AIFF) gets a ▶ play/stop button.
+- **Text files** up to 256 KiB get a collapsed **Preview** pane.
+
+If the reply's Markdown names an artifact image from the same conversation (for example
+`![image](mcp-image-2.png)`), the image is shown inline. It isn't fetched from anywhere, so it doesn't need the
+**Allow all images** permission. Other formats only offer **Save as…**.
 
 ## Dynamic tools (agent-built, sensitive)
 
@@ -451,6 +503,20 @@ block. The client is in `tools/mcp`: plain JSON-RPC 2.0, protocol `2025-06-18`, 
   automatically.
 - **Not supported:** the legacy HTTP+SSE transport (`GET /sse`), resources, prompts and sampling. Only tools are
   used. Use [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) as a stdio bridge for old SSE-only servers.
+
+**Test servers for the HTTP transport.** Two local JavaFX apps make convenient Streamable HTTP servers for trying
+the MCP setup and binary artifacts (the screenshots in
+[Downloadable response files](#downloadable-response-files) were made with them). Both servers are off by default,
+listen on loopback only, and are started with the **MCP** toggle in each app:
+
+| App | Endpoint | Headers | Useful tools |
+|-----|----------|---------|--------------|
+| [TalaatHarb/stt-tts](https://github.com/TalaatHarb/stt-tts) | `http://127.0.0.1:8765/mcp` | `Authorization=Bearer ${STT_TTS_MCP_TOKEN}`. Copy the token from the app's MCP settings (`mcp.token`). | `synthesize` returns WAV audio |
+| [TalaatHarb/image-gen](https://github.com/TalaatHarb/image-gen) | `http://127.0.0.1:8764/mcp` | none | `list_models`, `generate_image` returns a PNG |
+
+Download the models in each app first, and raise the *Tool call timeout* setting if a generation takes longer
+than 120 s (this mostly happens on the first call, while the model loads). The audio and image they return are
+saved as conversation artifacts and shown inline.
 
 Example: an `mcp.json` you can import.
 

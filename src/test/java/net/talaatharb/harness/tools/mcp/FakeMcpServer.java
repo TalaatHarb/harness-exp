@@ -55,6 +55,12 @@ public final class FakeMcpServer {
             case "tools/call" -> {
                 JsonNode params = request.path("params");
                 String name = params.path("name").asText();
+                if (params.path("arguments").has("content")) {
+                    result.set("content", params.path("arguments").get("content"));
+                    result.put("isError", "fail".equals(name));
+                    response.set("result", result);
+                    return response;
+                }
                 String text = switch (name) {
                     case "echo" -> "echo: " + params.path("arguments").path("text").asText();
                     case "fail" -> "boom";

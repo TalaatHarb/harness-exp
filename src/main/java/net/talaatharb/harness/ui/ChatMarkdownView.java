@@ -1,7 +1,10 @@
 package net.talaatharb.harness.ui;
 
+import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,15 +38,23 @@ class ChatMarkdownView extends MarkdownView {
 
     private BooleanProperty imagesAllowed;
     private Consumer<String> linkHandler;
+    private Function<String, Optional<Path>> localImages;
+
+    ChatMarkdownView(String text, BooleanProperty imagesAllowed, Consumer<String> linkHandler) {
+        this(text, imagesAllowed, linkHandler, null);
+    }
 
     /**
      * @param imagesAllowed shared "allow all images" switch; placeholders load their image when it turns true
      * @param linkHandler   called with the target when a link is clicked
+     * @param localImages   resolves references to the conversation's own (local, trusted) files; may be null
      */
-    ChatMarkdownView(String text, BooleanProperty imagesAllowed, Consumer<String> linkHandler) {
+    ChatMarkdownView(String text, BooleanProperty imagesAllowed, Consumer<String> linkHandler,
+            Function<String, Optional<Path>> localImages) {
         super("", List.of());
         this.imagesAllowed = imagesAllowed;
         this.linkHandler = linkHandler;
+        this.localImages = localImages;
         getStyleClass().addAll("bubble", "bubble-assistant", "markdown");
         setMaxWidth(720);
         MenuItem copy = new MenuItem("Copy");
@@ -61,6 +72,16 @@ class ChatMarkdownView extends MarkdownView {
         }
         if (imagesAllowed == null) {
             return new Label();
+        }
+        if (localImages != null && !url.contains(":") && !url.contains("//")) {
+            Optional<Path> local = localImages.apply(url);
+            if (local.isPresent() && ArtifactPreview.kind(local.get().getFileName().toString())
+                    == ArtifactPreview.Kind.IMAGE) {
+                Node preview = ArtifactPreview.image(local.get(), local.get().getFileName().toString());
+                if (preview != null) {
+                    return preview;
+                }
+            }
         }
         StackPane holder = new StackPane();
         holder.setAlignment(Pos.CENTER_LEFT);

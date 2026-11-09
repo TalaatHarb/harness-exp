@@ -21,6 +21,7 @@ import com.google.inject.Singleton;
 import net.talaatharb.harness.config.HarnessSettings;
 import net.talaatharb.harness.config.SettingsStore;
 import net.talaatharb.harness.tools.Tool;
+import net.talaatharb.harness.history.ArtifactStore;
 
 /**
  * Keeps one connection per enabled MCP server in the applied settings. Servers are (re)connected in the background
@@ -49,6 +50,7 @@ public class McpClientManager implements McpToolSource, AutoCloseable {
 
     private final SettingsStore store;
     private final UnaryOperator<String> env;
+    private final ArtifactStore artifacts;
     private final Map<String, Entry> entries = new LinkedHashMap<>();
     private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
     private final ExecutorService executor = Executors.newCachedThreadPool(r -> {
@@ -58,14 +60,23 @@ public class McpClientManager implements McpToolSource, AutoCloseable {
     });
     private volatile boolean closed;
 
-    @Inject
     public McpClientManager(SettingsStore store) {
-        this(store, System::getenv);
+        this(store, System::getenv, null);
+    }
+
+    @Inject
+    public McpClientManager(SettingsStore store, ArtifactStore artifacts) {
+        this(store, System::getenv, artifacts);
     }
 
     McpClientManager(SettingsStore store, UnaryOperator<String> env) {
+        this(store, env, null);
+    }
+
+    McpClientManager(SettingsStore store, UnaryOperator<String> env, ArtifactStore artifacts) {
         this.store = store;
         this.env = env;
+        this.artifacts = artifacts;
         store.addListener(this::syncWithSettings);
         syncWithSettings();
     }
@@ -194,7 +205,7 @@ public class McpClientManager implements McpToolSource, AutoCloseable {
             for (McpClient.ToolInfo info : e.tools) {
                 String name = names.add(info.name()) ? info.name() : uniqueName(e.config.name, info.name(), names);
                 tools.add(new McpTool(name, e.client, info,
-                        () -> Duration.ofSeconds(Math.max(1, settings().tools.mcpToolTimeoutSeconds))));
+                        () -> Duration.ofSeconds(Math.max(1, settings().tools.mcpToolTimeoutSeconds)), artifacts));
             }
         }
         return tools;

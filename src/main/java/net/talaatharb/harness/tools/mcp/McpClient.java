@@ -15,6 +15,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import net.talaatharb.harness.tools.ToolResult;
+import net.talaatharb.harness.agent.ConversationScope;
+import net.talaatharb.harness.history.ArtifactStore;
 
 /** One initialized MCP session: handshake, {@code tools/list} and {@code tools/call}. */
 public class McpClient implements AutoCloseable {
@@ -98,26 +100,42 @@ public class McpClient implements AutoCloseable {
 
     public ToolResult callTool(String name, Map<String, Object> arguments, Duration timeout)
             throws IOException, InterruptedException {
+        return callTool(name, arguments, timeout, null);
+    }
+
+    public ToolResult callTool(String name, Map<String, Object> arguments, Duration timeout, ArtifactStore artifacts)
+            throws IOException, InterruptedException {
         ObjectNode params = McpTransport.JSON.createObjectNode().put("name", name);
         params.set("arguments", McpTransport.JSON.valueToTree(arguments == null ? Map.of() : arguments));
         JsonNode result = transport.request("tools/call", params, timeout);
-        String text = formatContent(result);
+        String text = result.path("isError").asBoolean(false) ? formatContent(result)
+                : formatContent(result, artifacts, ConversationScope.current());
         return result.path("isError").asBoolean(false) ? ToolResult.error(text) : ToolResult.ok(text);
     }
 
     /** Flattens MCP content blocks into text the model can read. */
-    static String formatContent(JsonNode result) {
+    static String formatContent(JsonNode result) throws IOException {
+        return formatContent(result, null, null);
+    }
+
+    static String formatContent(JsonNode result, ArtifactStore artifacts, String conversationId) throws IOException {
         List<String> parts = new ArrayList<>();
+        int block = 0;
         for (JsonNode c : result.path("content")) {
+            block++;
             switch (c.path("type").asText()) {
                 case "text" -> parts.add(c.path("text").asText());
-                case "image", "audio" -> parts.add("[" + c.path("type").asText() + ": "
+                case "image", "audio" -> parts.add(artifacts != null
+                        ? captureBinary(c, "data", "mcp-" + c.path("type").asText() + "-" + block, artifacts, conversationId)
+                        : "[" + c.path("type").asText() + ": "
                         + c.path("mimeType").asText("?") + ", "
                         + approxBytes(c.path("data").asText("")) + " bytes; not shown to the model]");
                 case "resource" -> {
                     JsonNode r = c.path("resource");
                     parts.add(r.has("text") ? "[resource " + r.path("uri").asText() + "]\n" + r.path("text").asText()
-                            : "[binary resource " + r.path("uri").asText() + " (" + r.path("mimeType").asText("?")
+                            : artifacts != null
+                                    ? captureBinary(r, "blob", "mcp-resource-" + block, artifacts, conversationId)
+                                    : "[binary resource " + r.path("uri").asText() + " (" + r.path("mimeType").asText("?")
                                     + ")]");
                 }
                 case "resource_link" -> parts.add("[resource link: " + c.path("uri").asText()
@@ -129,6 +147,42 @@ public class McpClient implements AutoCloseable {
             parts.add(result.get("structuredContent").toString());
         }
         return parts.isEmpty() ? "(no output)" : String.join("\n", parts);
+    }
+
+    private static String captureBinary(JsonNode content, String dataField, String filename, ArtifactStore artifacts,
+            String conversationId) throws IOException {
+        if (conversationId == null) {
+            throw new IOException("MCP binary output cannot be saved without an active conversation");
+        }
+        if (!content.path(dataField).isTextual()) {
+            throw new IOException("MCP binary output requires Base64 string field '" + dataField + "'");
+        }
+        try {
+            byte[] bytes = ArtifactStore.decodeBase64(content.get(dataField).asText());
+            String mime = content.path("mimeType").asText("application/octet-stream");
+            String extension = switch (mime.split(";", 2)[0].strip().toLowerCase(java.util.Locale.ROOT)) {
+                case "image/png" -> ".png";
+                case "image/jpeg" -> ".jpg";
+                case "image/gif" -> ".gif";
+                case "image/webp" -> ".webp";
+                case "image/avif" -> ".avif";
+                case "image/svg+xml" -> ".svg";
+                case "image/bmp" -> ".bmp";
+                case "audio/wav", "audio/x-wav", "audio/wave" -> ".wav";
+                case "audio/mpeg", "audio/mp3" -> ".mp3";
+                case "audio/ogg", "application/ogg" -> ".ogg";
+                case "audio/flac" -> ".flac";
+                case "audio/mp4", "audio/x-m4a" -> ".m4a";
+                case "audio/aac" -> ".aac";
+                case "video/mp4" -> ".mp4";
+                case "application/pdf" -> ".pdf";
+                default -> ".bin";
+            };
+            var artifact = artifacts.writeBinary(conversationId, filename + extension, bytes);
+            return ArtifactStore.ARTIFACT_PREFIX + McpTransport.JSON.writeValueAsString(artifact);
+        } catch (IllegalArgumentException e) {
+            throw new IOException("Could not save MCP binary output: " + e.getMessage(), e);
+        }
     }
 
     private static int approxBytes(String base64) {

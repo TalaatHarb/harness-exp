@@ -386,6 +386,12 @@ public class MainController {
             history.delete(selected.id());
         } catch (RuntimeException e) {
             LOG.error("Could not delete conversation {}", selected.id(), e);
+            Alert error = new Alert(Alert.AlertType.ERROR, e.getMessage(), ButtonType.OK);
+            error.setHeaderText("Delete conversation failed");
+            error.initOwner(messagesBox.getScene().getWindow());
+            error.showAndWait();
+            refreshHistory();
+            return;
         }
         try {
             int docs = rag.deleteConversation(selected.id());
@@ -498,6 +504,7 @@ public class MainController {
         messagesBox.getChildren().remove(emptyLabel);
         Exchange exchange = new Exchange(turn, attachments, settings);
         exchange.view = new AssistantTurnView(settings.reply, this::send, () -> regenerate(exchange), imagesAllowed);
+        exchange.view.setArtifacts(history.artifacts(), record.id);
         exchanges.add(exchange);
         messagesBox.getChildren().addAll(exchange.userNode, exchange.view.root());
         return exchange;

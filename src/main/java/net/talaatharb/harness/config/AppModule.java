@@ -83,6 +83,7 @@ public class AppModule extends AbstractModule {
         tools.addBinding().to(net.talaatharb.harness.tools.builtin.CalculateTool.class);
         tools.addBinding().to(ReadFileTool.class);
         tools.addBinding().to(net.talaatharb.harness.tools.builtin.WriteFileTool.class);
+        tools.addBinding().to(net.talaatharb.harness.tools.builtin.WriteBinaryFileTool.class);
         tools.addBinding().to(net.talaatharb.harness.tools.builtin.RunNativeShellTool.class);
         tools.addBinding().to(net.talaatharb.harness.tools.builtin.RunPythonCodeTool.class);
         tools.addBinding().to(net.talaatharb.harness.tools.builtin.AskUserForDecisionTool.class);
