@@ -82,6 +82,8 @@ public class AppModule extends AbstractModule {
         tools.addBinding().to(CurrentTimeTool.class);
         tools.addBinding().to(net.talaatharb.harness.tools.builtin.CalculateTool.class);
         tools.addBinding().to(ReadFileTool.class);
+        tools.addBinding().to(net.talaatharb.harness.tools.builtin.FileDiscoveryTool.class);
+        tools.addBinding().to(net.talaatharb.harness.tools.builtin.HttpRequestTool.class);
         tools.addBinding().to(net.talaatharb.harness.tools.builtin.WriteFileTool.class);
         tools.addBinding().to(net.talaatharb.harness.tools.builtin.WriteBinaryFileTool.class);
         tools.addBinding().to(net.talaatharb.harness.tools.builtin.RunNativeShellTool.class);

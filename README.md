@@ -53,7 +53,7 @@ separate **⚙ Harness** settings window, one tab per harness concern.
 | Tools + MCP | Built-in tools, enable/disable, output cap, web search provider and limits, MCP servers (stdio / streamable HTTP) with live status, test, reconnect and `mcp.json` import | `tools` |
 | Agent loop | Iteration/tool-call/duration/repeat/error limits (clamped by hard ceilings in `AgentLoopLimits`) and `HookPoint`s | `agent` |
 | Guardrails | Input/tool-call/output guardrails: length limit, blocked terms, secret redaction | `guardrails` |
-| Human approval | Never / risky tools / all tools, always-allowed list, timeout (denies and closes the dialog). Tools that run agent-written code (`create_tool`, dynamic tools) or rewrite its instructions (`create_skill`) and `DANGEROUS` tools need approval on **every** call, whatever the policy, and can't be "always allowed" | `approval` |
+| Human approval | Never / risky tools / all tools, always-allowed list, timeout (denies and closes the dialog). Tools that run agent-written code (`create_tool`, dynamic tools), rewrite its instructions (`create_skill`), make API requests (`http_request`), and `DANGEROUS` tools need approval on **every** call, whatever the policy, and can't be "always allowed" | `approval` |
 | Reply | Markdown or raw text, plus **agentic UI**: the model emits ```` ```ui ```` JSON blocks rendered as live JavaFX components; image permission and tool trace, thinking, sent-context and run-timeline toggles | `reply` |
 | Speech | Voice input on/off, send right after dictation, transcribe audio attachments, language, max recording length, model download | `speech` |
 | Storage | External locations for the skills folder, dynamic tools folder, MapDB history file, local models folder, memory folder, memory DB and RAG index folder (browse or type; blank = default). Applies after restart | `storage` |
@@ -166,6 +166,8 @@ so it can retry (bounded by the iteration limit).
 
 | Tool | Risk | What it does |
 |---|---|---|
+| `file_discovery` | sensitive | Lists a directory, finds filenames with a glob, or searches literal UTF-8 text with line-numbered snippets. Explicit root directory, bounded traversal/output, no symlink following |
+| `http_request` | sensitive, approval every call | Calls HTTP(S) APIs (including localhost) with a method, headers and optional UTF-8 body. Returns status, selected headers and bounded text. No redirect following or automatic result retries |
 | `write_file` | sensitive | Writes (or appends with `append: true`) UTF-8 `content` to `path`, creating parent folders. Use `artifact: true` and a plain filename for a downloadable conversation file (no append). Up to 1,000,000 characters |
 | `write_binary_file` | sensitive | Saves binary data from exactly one of `base64` or `sourcePath` (an existing local file). Defaults to a downloadable artifact; `artifact: false` writes to an ordinary path. No append; up to 20 MiB per file |
 | `run_native_shell` | dangerous | Runs `command` in PowerShell (Windows) or bash/sh (elsewhere), optional `workingDirectory` and `timeoutSeconds` (default 60, max 600). Returns exit code and combined output (20KB cap) |
@@ -175,6 +177,56 @@ so it can retry (bounded by the iteration limit).
 Dangerous tools need approval on every call and run **without a sandbox**; timeouts kill the process tree.
 PowerShell output is UTF-8 and runs with `$ErrorActionPreference = 'Stop'`, so a cmdlet error cannot be
 hidden by a later successful command. Invalid timeout or working-directory argument types return errors.
+
+### File discovery
+
+Use `file_discovery` instead of shell commands for read-only directory listing, filename discovery and content
+search. It uses the same sensitive-tool approval policy as `read_file`; it does not introduce a filesystem sandbox.
+The `path` is an explicit root directory, absolute or relative to the application's working directory:
+
+```json
+{"path":"C:\\Documents","operation":"list"}
+{"path":"C:\\Documents","operation":"find","glob":"*.pdf","maxDepth":5}
+{"path":"C:\\Documents","operation":"search","glob":"*.txt","query":"invoice","caseSensitive":false}
+```
+
+`list` inspects immediate children only. `find` and `search` default to depth 5 (maximum 32). Globs match a filename
+or a relative path using the host filesystem's glob syntax. Content queries are **literal**, not regex.
+Hidden entries are excluded unless `includeHidden: true`; symbolic links are not followed.
+Results include absolute paths and either metadata or line numbers and snippets. Use `read_file` for more context.
+
+Each call stops at 100 results by default (`maxResults`, maximum 500), 10,000 visited entries, a cooperative
+10-second scan budget, or approximately 20,000 characters of result entries. Content search skips files larger than
+256 KiB, invalid UTF-8 and NUL-containing files, and reads at most 8 MiB total (plus a byte to detect growth).
+`skippedFiles`, `incomplete`, `stopReason` and `errors` distinguish an empty result from a limited or failed search.
+Filesystem errors return a failed tool result with any partial matches. Narrow the root/glob to inspect omitted files.
+The normal tool-output cap still applies when results are sent to the model.
+
+### HTTP API requests
+
+`http_request` is for explicitly requested API interactions, not a replacement for the robots-aware web research
+tools. It supports `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE` and `OPTIONS`, including local/private-network APIs.
+**Every call needs approval**, even with the Never policy or an always-allowed entry: any method can disclose data
+or affect remote state. Review the destination, headers and body before approving.
+
+```json
+{"url":"http://127.0.0.1:8080/health"}
+{"url":"https://api.example.com/items","method":"POST","headers":{"Content-Type":"application/json"},"body":"{\"name\":\"example\"}","bearerTokenEnv":"EXAMPLE_API_TOKEN"}
+```
+
+`bearerTokenEnv` reads a bearer token from the harness process's environment at execution time; the arguments contain
+only the variable name. Missing variables fail the call. Prefer this over putting secrets in prompts or headers.
+The tool redacts that token if it is echoed verbatim in the returned text or selected response headers; this is not
+a guarantee against encoded or transformed secrets returned by a server.
+
+Request bodies are UTF-8 strings up to 1 MB; GET/HEAD reject bodies. The total request timeout defaults to 30 seconds
+(`timeoutSeconds`, 1–120), including receiving the response body. Text responses default to 16 KiB
+(`maxResponseBytes`, maximum 64 KiB); results explicitly report truncation. JSON, XML and text media types are
+supported; binary downloads are not implemented in this tool. Response character sets are honored, defaulting to UTF-8.
+Only Content-Type, Location, Retry-After, ETag and Last-Modified response headers are returned, not cookies.
+TLS verification stays enabled, URLs cannot embed credentials, and transport/framing headers cannot be overridden.
+There is no cookie jar, redirect following or automatic retry of results. Non-2xx statuses return failed tool results
+with the response details. After cancellation or a timeout, **remote state is unknown**: do not blindly retry mutations.
 
 ### Downloadable response files
 
@@ -574,6 +626,36 @@ Planned, task-agnostic harness experiments (not specific to coding or any other 
   settings or models) with optional judge-model scoring for manual-review tasks, clearly labelled as such.
 - [ ] **Conversation branching**: edit an earlier message and continue from it as a new branch, keeping the
   original branch, instead of Regenerate discarding later turns.
+- [ ] **Browser interaction**: planned only; see [the proposed design](#browser-interaction-plan-not-implemented).
+
+### Browser interaction plan (not implemented)
+
+The goal is general-purpose interaction with JavaScript-driven websites, complementing `web_search_extract`
+and `http_request`, without turning the harness into a task-specific browser agent.
+
+1. **Backend and lifecycle.** Start with an optional Playwright-backed MCP server, keeping browser dependencies out
+   of the JavaFX core. Use a dedicated, visible browser context per conversation, not the user's normal browser
+   profile. Initially keep sessions ephemeral; close the browser on conversation deletion, disconnect or app exit.
+   Authentication is performed by the user in the browser; never expose cookies, passwords or storage tokens to
+   the model. Do not promise sandboxing simply because the browser uses another process.
+2. **Minimal tool contract.** Navigate/back, return a bounded accessibility snapshot, click an element, fill a field,
+   select an option, scroll, and take a screenshot. Use stable element references tied to a snapshot/page revision;
+   reject stale references rather than guessing which element the agent meant. Return new snapshots after actions.
+   Screenshots and user-approved downloads become conversation artifacts through the existing artifact pipeline.
+3. **Permissions and user control.** Review destination origins, gate navigation to private networks, and block
+   `file:`/other non-web URLs. Initially require per-action approval for all interactions, because even a click or
+   navigation can submit data or change state. Show the current origin and proposed action; allow manual takeover
+   and Stop. Require explicit permission before uploads. Do not bypass CAPTCHAs or access restrictions.
+4. **Context and limits.** Treat page text as untrusted evidence, never as harness instructions. Bound snapshot size,
+   actions, tabs, downloads and navigation time. Exclude password values and sensitive fields from snapshots and
+   mask them in screenshots. Cancellation stops pending automation but cannot undo an already submitted action;
+   never automatically replay submissions during recovery.
+5. **Delivery and acceptance checks.** First ship read-only navigation/snapshots/screenshots; then enable approved
+   interactions and artifact downloads. Use local fixture sites to check dynamic pages, stale references, forms,
+   cross-origin navigation, denied actions/uploads, secret masking, timeouts, cancellation and session cleanup.
+   Include a check that a denied submission causes no server-side mutation and that retries do not duplicate one.
+
+No browser tools, dependencies or browser process are added by this plan.
 
 ## Run timeline & context compaction
 

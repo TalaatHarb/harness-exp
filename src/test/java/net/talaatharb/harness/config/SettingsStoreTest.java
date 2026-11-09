@@ -48,5 +48,9 @@ class SettingsStoreTest {
         var injector = Guice.createInjector(new AppModule(dir.resolve("s.json")));
         assertNotNull(injector.getInstance(AgentLoop.class));
         assertEquals(9, injector.getInstance(ContextBuilder.class).contributors().size());
+        var tools = injector.getInstance(net.talaatharb.harness.tools.ToolRegistry.class);
+        HarnessSettings settings = new HarnessSettings();
+        assertTrue(tools.findEnabled("file_discovery", settings).isPresent());
+        assertTrue(tools.findEnabled("http_request", settings).isPresent());
     }
 }

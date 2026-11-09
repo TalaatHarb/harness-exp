@@ -61,7 +61,7 @@ public class ApprovalService {
         boolean mandatory = isMandatory(tool);
         String reason = mandatory
                 ? "This tool needs approval on every call (" + (tool.alwaysRequiresApproval()
-                        ? "it runs agent-written code" : "it is dangerous") + ")."
+                        ? "the tool requires per-call review" : "it is dangerous") + ")."
                 : "Policy: " + settings.approval.policy;
         return new ApprovalRequest(tool.name(), argumentsJson, tool.risk(), reason, !mandatory);
     }
