@@ -110,6 +110,9 @@ public class SettingsTransfer {
         bundle.settings.skills = null;
         if (!options.apiKey()) {
             bundle.settings.model.apiKey = "";
+            if (bundle.settings.rag != null) {
+                bundle.settings.rag.embeddingApiKey = "";
+            }
             // MCP env vars / headers may hold tokens; ${VAR} references are kept since they aren't secrets.
             bundle.settings.tools.mcpServers.forEach(server -> server.env.replaceAll(
                     (k, v) -> McpServerConfig.isReference(v) ? v : ""));
@@ -214,6 +217,9 @@ public class SettingsTransfer {
             imported.skills = null;
             if (options.keepApiKey()) {
                 imported.model.apiKey = current.model.apiKey;
+                if (imported.rag != null && current.rag != null) {
+                    imported.rag.embeddingApiKey = current.rag.embeddingApiKey;
+                }
             }
             if (options.keepStorage()) {
                 imported.storage = mapper().convertValue(current.storage, StorageSettings.class);

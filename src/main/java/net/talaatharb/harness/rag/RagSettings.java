@@ -6,10 +6,13 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class RagSettings {
     public static final String DEFAULT_OLLAMA_MODEL = "nomic-embed-text";
+    public static final String DEFAULT_OPENAI_MODEL = "text-embedding-3-small";
 
     public enum EmbedderType {
         /** Ollama {@code /api/embed} with an embedding model, e.g. nomic-embed-text. */
         OLLAMA,
+        /** Cloud or local services implementing OpenAI's {@code /embeddings} API. */
+        OPENAI,
         /** Offline hashed bag-of-words vectors: no model needed, keyword-level matching only. */
         BUILT_IN
     }
@@ -18,8 +21,10 @@ public class RagSettings {
     public boolean autoContext = true;
     public EmbedderType embedder = EmbedderType.OLLAMA;
     public String embeddingModel = DEFAULT_OLLAMA_MODEL;
-    /** Blank = the Model tab's URL when the provider is Ollama, otherwise the local Ollama. */
+    /** Blank = Ollama's existing fallback, or https://api.openai.com/v1 for OpenAI-compatible embeddings. */
     public String embeddingBaseUrl = "";
+    /** Dedicated embedding credential; blank uses the provider's environment/model fallback. */
+    public String embeddingApiKey = "";
     /** Target chunk length in characters. */
     public int chunkSize = 1200;
     /** Characters repeated from the end of the previous chunk so ideas cut at a boundary stay searchable. */

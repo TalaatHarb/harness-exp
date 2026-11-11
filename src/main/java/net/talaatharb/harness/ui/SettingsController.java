@@ -125,7 +125,7 @@ public class SettingsController {
         CheckBox tools = new CheckBox("Dynamic tools (source code)");
         CheckBox memories = new CheckBox("Memories (from the backend selected in the Memory tab)");
         memories.setSelected(true);
-        CheckBox apiKey = new CheckBox("API key and MCP env/header values (secrets: only share the file with care)");
+        CheckBox apiKey = new CheckBox("API keys and MCP env/header values (secrets: only share the file with care)");
         skills.setSelected(true);
         tools.setSelected(true);
         Dialog<ButtonType> dialog = optionsDialog("Export harness settings",
@@ -167,7 +167,7 @@ public class SettingsController {
             return;
         }
         CheckBox settings = new CheckBox("Settings (model, system prompt, context, tools, loop, guardrails, …)");
-        CheckBox keepKey = new CheckBox("Keep my current API key");
+        CheckBox keepKey = new CheckBox("Keep my current chat and embedding API keys");
         CheckBox keepStorage = new CheckBox("Keep my current storage folders");
         CheckBox skills = new CheckBox("Skills (" + bundle.skills.size() + "; same-name skills are replaced)");
         CheckBox tools = new CheckBox("Dynamic tools (" + bundle.dynamicTools.size()

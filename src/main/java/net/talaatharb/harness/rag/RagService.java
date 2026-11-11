@@ -99,10 +99,16 @@ public class RagService implements AutoCloseable {
             return new HashingEmbedder();
         }
         ModelSettings model = s.model == null ? new ModelSettings() : s.model;
+        Duration timeout = Duration.ofSeconds(Math.max(10, model.requestTimeoutSeconds));
+        if (rag.embedder == RagSettings.EmbedderType.OPENAI) {
+            String key = !blank(rag.embeddingApiKey) ? rag.embeddingApiKey : System.getenv("OPENAI_API_KEY");
+            return new OpenAiEmbedder(rag.embeddingBaseUrl, rag.embeddingModel, key, timeout);
+        }
         boolean ollamaChat = OllamaModelProvider.ID.equals(model.provider);
         String base = !blank(rag.embeddingBaseUrl) ? rag.embeddingBaseUrl
                 : ollamaChat && !blank(model.baseUrl) ? model.baseUrl : ModelSettings.LOCAL_OLLAMA_URL;
-        String key = ollamaChat && !blank(model.apiKey) ? model.apiKey : System.getenv("OLLAMA_API_KEY");
+        String key = !blank(rag.embeddingApiKey) ? rag.embeddingApiKey
+                : ollamaChat && !blank(model.apiKey) ? model.apiKey : System.getenv("OLLAMA_API_KEY");
         return new OllamaEmbedder(base, rag.embeddingModel, key,
                 Duration.ofSeconds(Math.max(10, model.requestTimeoutSeconds)));
     }

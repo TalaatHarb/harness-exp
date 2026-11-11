@@ -62,6 +62,7 @@ class SettingsTransferTest {
         HarnessSettings s = source.store().copy();
         s.model.model = "llama3.2";
         s.model.apiKey = "secret-key";
+        s.rag.embeddingApiKey = "embedding-secret";
         s.systemPrompt.template = "You are a pirate.";
         s.guardrails.blockedTerms.add("parrot");
         source.store().replace(s);
@@ -73,11 +74,15 @@ class SettingsTransferTest {
                 SettingsTransfer.ExportOptions.defaults()), file);
         String json = Files.readString(file);
         assertFalse(json.contains("secret-key"));
+        assertFalse(json.contains("embedding-secret"));
+        assertEquals("embedding-secret", source.transfer().export(s,
+                new SettingsTransfer.ExportOptions(false, false, true)).settings.rag.embeddingApiKey);
         assertTrue(json.contains(SettingsBundle.FORMAT));
 
         Env target = env("target");
         HarnessSettings mine = target.store().copy();
         mine.model.apiKey = "my-key";
+        mine.rag.embeddingApiKey = "my-embedding-key";
         mine.storage.skillsDir = "D:/my-skills";
         target.store().replace(mine);
         SettingsBundle bundle = target.transfer().read(file);
@@ -88,6 +93,7 @@ class SettingsTransferTest {
         HarnessSettings now = target.store().current();
         assertEquals("llama3.2", now.model.model);
         assertEquals("my-key", now.model.apiKey);
+        assertEquals("my-embedding-key", now.rag.embeddingApiKey);
         assertEquals("D:/my-skills", now.storage.skillsDir);
         assertEquals("You are a pirate.", now.systemPrompt.template);
         assertTrue(now.guardrails.blockedTerms.contains("parrot"));

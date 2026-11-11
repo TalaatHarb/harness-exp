@@ -467,6 +467,11 @@ memories, documents belong to **one conversation**.
   in an [Apache Lucene](https://lucene.apache.org/) 9 index in `~/.harness-exp/rag-index/` (the folder can be changed
   in **Storage**). Embeddings of up to 4096 dimensions are supported.
 - **Embedders** (set in the **RAG** tab):
+  - **OpenAI-compatible (cloud)** uses `/embeddings`. Set the API base URL (default
+    `https://api.openai.com/v1`), an embedding model (e.g. `text-embedding-3-small`), and the dedicated
+    embedding API key, or set `OPENAI_API_KEY`. Compatible providers can use a different URL and model.
+    This is independent of the chat provider. Document passages and search queries are sent to the service;
+    provider charges may apply. Keys are stored in local settings and excluded from exports by default.
   - **Ollama** (default) uses `/api/embed` with an embedding model. Install one first:
     `ollama pull nomic-embed-text` (alternatives: `mxbai-embed-large`, `bge-m3`, `all-minilm`). The URL defaults to the
     Model tab's Ollama URL. Chat models can't produce embeddings, so the **Test** button reports an error for them.

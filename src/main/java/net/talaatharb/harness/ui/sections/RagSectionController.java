@@ -13,6 +13,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.PasswordField;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.VBox;
@@ -35,6 +36,8 @@ public class RagSectionController implements SettingsSection {
     @FXML private TextField modelField;
     @FXML private Label baseUrlLabel;
     @FXML private TextField baseUrlField;
+    @FXML private Label apiKeyLabel;
+    @FXML private PasswordField apiKeyField;
     @FXML private Button testButton;
     @FXML private Label testLabel;
     @FXML private Spinner<Integer> chunkSizeSpinner;
@@ -46,6 +49,7 @@ public class RagSectionController implements SettingsSection {
     @FXML private Spinner<Integer> fileMbSpinner;
 
     private Supplier<HarnessSettings> draft;
+    private boolean loading;
 
     @FXML
     private void initialize() {
@@ -53,8 +57,11 @@ public class RagSectionController implements SettingsSection {
         embedderCombo.setConverter(new StringConverter<>() {
             @Override
             public String toString(EmbedderType type) {
-                return type == null ? "" : type == EmbedderType.OLLAMA ? "Ollama embedding model"
-                        : "Built-in (offline, keywords)";
+                return type == null ? "" : switch (type) {
+                    case OLLAMA -> "Ollama embedding model";
+                    case OPENAI -> "OpenAI-compatible (cloud)";
+                    case BUILT_IN -> "Built-in (offline, keywords)";
+                };
             }
 
             @Override
@@ -62,15 +69,31 @@ public class RagSectionController implements SettingsSection {
                 return null;
             }
         });
-        embedderCombo.valueProperty().addListener((o, a, b) -> updateEnabled());
-        baseUrlField.setPromptText("blank = the Model tab's Ollama URL, else http://localhost:11434");
+        embedderCombo.valueProperty().addListener((o, a, b) -> {
+            if (!loading) {
+                if (b == EmbedderType.OPENAI && RagSettings.DEFAULT_OLLAMA_MODEL.equals(modelField.getText())) {
+                    modelField.setText(RagSettings.DEFAULT_OPENAI_MODEL);
+                } else if (b == EmbedderType.OLLAMA
+                        && RagSettings.DEFAULT_OPENAI_MODEL.equals(modelField.getText())) {
+                    modelField.setText(RagSettings.DEFAULT_OLLAMA_MODEL);
+                }
+            }
+            updateEnabled();
+        });
     }
 
     private void updateEnabled() {
-        boolean ollama = embedderCombo.getValue() != EmbedderType.BUILT_IN;
-        for (var node : List.of(modelLabel, modelField, baseUrlLabel, baseUrlField)) {
-            node.setDisable(!ollama);
+        boolean remote = embedderCombo.getValue() != EmbedderType.BUILT_IN;
+        boolean cloud = embedderCombo.getValue() == EmbedderType.OPENAI;
+        for (var node : List.of(modelLabel, modelField, baseUrlLabel, baseUrlField, apiKeyLabel, apiKeyField)) {
+            node.setDisable(!remote);
         }
+        baseUrlLabel.setText(cloud ? "API base URL" : "Ollama URL");
+        baseUrlField.setPromptText(cloud ? "blank = https://api.openai.com/v1"
+                : "blank = the Model tab's Ollama URL, else http://localhost:11434");
+        apiKeyField.setPromptText(cloud ? "blank = OPENAI_API_KEY environment variable"
+                : "blank = Model tab's Ollama key or OLLAMA_API_KEY");
+        modelField.setPromptText(cloud ? RagSettings.DEFAULT_OPENAI_MODEL : RagSettings.DEFAULT_OLLAMA_MODEL);
     }
 
     @Override
@@ -82,9 +105,12 @@ public class RagSectionController implements SettingsSection {
     public void load(HarnessSettings settings) {
         RagSettings s = settings.rag == null ? new RagSettings() : settings.rag;
         autoContextCheck.setSelected(s.autoContext);
+        loading = true;
         embedderCombo.setValue(s.embedder == null ? EmbedderType.OLLAMA : s.embedder);
+        loading = false;
         modelField.setText(s.embeddingModel);
         baseUrlField.setText(s.embeddingBaseUrl);
+        apiKeyField.setText(s.embeddingApiKey);
         SettingsSection.intSpinner(chunkSizeSpinner, 200, 8000, s.chunkSize);
         SettingsSection.intSpinner(overlapSpinner, 0, 2000, s.chunkOverlap);
         SettingsSection.intSpinner(contextSpinner, 0, 20, s.contextResults);
@@ -105,8 +131,10 @@ public class RagSectionController implements SettingsSection {
         s.autoContext = autoContextCheck.isSelected();
         s.embedder = embedderCombo.getValue() == null ? EmbedderType.OLLAMA : embedderCombo.getValue();
         String model = modelField.getText() == null ? "" : modelField.getText().strip();
-        s.embeddingModel = model.isEmpty() ? RagSettings.DEFAULT_OLLAMA_MODEL : model;
+        s.embeddingModel = model.isEmpty() ? (s.embedder == EmbedderType.OPENAI ? RagSettings.DEFAULT_OPENAI_MODEL
+                : RagSettings.DEFAULT_OLLAMA_MODEL) : model;
         s.embeddingBaseUrl = baseUrlField.getText() == null ? "" : baseUrlField.getText().strip();
+        s.embeddingApiKey = apiKeyField.getText() == null ? "" : apiKeyField.getText().strip();
         s.chunkSize = SettingsSection.spinnerValue(chunkSizeSpinner);
         s.chunkOverlap = Math.min(SettingsSection.spinnerValue(overlapSpinner), s.chunkSize / 2);
         s.contextResults = SettingsSection.spinnerValue(contextSpinner);
@@ -120,7 +148,14 @@ public class RagSectionController implements SettingsSection {
     private void onTest() {
         HarnessSettings settings = draft != null ? draft.get() : new HarnessSettings();
         apply(settings);
-        Embedder embedder = RagService.embedderFor(settings);
+        Embedder embedder;
+        try {
+            embedder = RagService.embedderFor(settings);
+        } catch (IllegalArgumentException e) {
+            LOG.warn("Invalid embedding configuration");
+            testLabel.setText("Failed: check the embedding URL and model settings.");
+            return;
+        }
         String where = embedder instanceof OllamaEmbedder o ? " at " + o.baseUrl() : "";
         testButton.setDisable(true);
         testLabel.setText("Testing " + embedder.id() + where + "…");

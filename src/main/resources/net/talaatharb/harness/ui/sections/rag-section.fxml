@@ -5,6 +5,7 @@
 <?import javafx.scene.control.CheckBox?>
 <?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
 <?import javafx.scene.control.Spinner?>
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.control.Tooltip?>
@@ -24,7 +25,7 @@
     <Label text="Embeddings" styleClass="subsection-title"/>
     <HBox spacing="8" alignment="CENTER_LEFT">
         <Label text="Embedder"/>
-        <ComboBox fx:id="embedderCombo" prefWidth="200"/>
+        <ComboBox fx:id="embedderCombo" prefWidth="240"/>
         <Label fx:id="modelLabel" text="Model"/>
         <TextField fx:id="modelField" prefColumnCount="18" promptText="nomic-embed-text"/>
     </HBox>
@@ -35,7 +36,13 @@
             <tooltip><Tooltip text="Embed two sample sentences with these settings"/></tooltip>
         </Button>
     </HBox>
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Label fx:id="apiKeyLabel" text="Embedding API key" minWidth="-1"/>
+        <PasswordField fx:id="apiKeyField" HBox.hgrow="ALWAYS"/>
+    </HBox>
     <Label fx:id="testLabel" wrapText="true" styleClass="section-help"/>
+    <Label wrapText="true" styleClass="section-help"
+           text="OpenAI-compatible embeddings use POST /embeddings at the API base URL (default https://api.openai.com/v1), e.g. text-embedding-3-small. Set an independent embedding API key or OPENAI_API_KEY. Cloud embedding sends document passages and search queries to that service; API charges may apply. Keys are saved in local settings, like the chat API key."/>
     <Label wrapText="true" styleClass="section-help"
            text="Ollama needs an embedding model, e.g. run 'ollama pull nomic-embed-text' (also mxbai-embed-large, bge-m3, all-minilm). The built-in embedder works offline with no model but only matches shared words. Documents keep the embedder they were indexed with: after switching, use Re-index in the 📚 window."/>
 
