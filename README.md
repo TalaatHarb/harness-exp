@@ -29,6 +29,9 @@ separate **⚙ Harness** settings window, one tab per harness concern.
     drawn locally with [JLaTeXMath](https://github.com/opencollab/jlatexmath), so nothing is fetched. Amounts like
     `$5 and $10` stay text, math inside code is left alone, `\$` is a literal dollar, and a formula that can't be
     parsed is shown as its TeX source.
+  - **Diagrams**: fenced `mermaid` blocks render locally with bundled Mermaid in a network-restricted WebView.
+    A source disclosure is available for every diagram; invalid or oversized diagrams display their source.
+    Mermaid configuration directives and frontmatter are not supported.
   - Images are not fetched until you click **Load image** or **Allow all images**, because a remote image URL
     chosen by the model can leak data.
   - Links open in your browser only after you confirm them; only `http`, `https` and `mailto` links can be opened.
@@ -39,6 +42,21 @@ separate **⚙ Harness** settings window, one tab per harness concern.
   and repairs. See [Run timeline](#run-timeline--context-compaction).
 
 ![The agent calling tools while answering](img/ToolUsage.PNG)
+
+## Profiles
+
+Use **Profile** in the main window to create profiles or choose one for the next launch. Close and reopen the app
+to switch; the currently running profile and its open conversations remain unchanged until then. The initial profiles
+are **default**, **learning**, and **coding**. Learning and Coding have starter prompts; Learning initially disables
+file editing, shell, Python and dynamic-tool creation. Adjust each profile in **⚙ Harness**.
+
+The Default profile keeps the existing `~/.harness-exp/settings.json` and all existing data in place; nothing is
+migrated or overwritten. Other profiles have their own `~/.harness-exp/profiles/<name>/settings.json` and, by default,
+separate skills, dynamic tools, conversations, models, memory and RAG indexes alongside that file. New profiles start
+with fresh settings, not copied API keys or MCP configuration. Configure the model and credentials for each profile.
+Storage paths can still be overridden per profile; explicitly pointing multiple profiles at the same path shares data.
+Profile names use letters, digits, hyphens and underscores. If `harness.settings` specifies a different settings file,
+that file is the Default profile and its sibling profile folder holds the others.
 
 ## Harness sections
 
@@ -167,6 +185,7 @@ so it can retry (bounded by the iteration limit).
 | Tool | Risk | What it does |
 |---|---|---|
 | `file_discovery` | sensitive | Lists a directory, finds filenames with a glob, or searches literal UTF-8 text with line-numbered snippets. Explicit root directory, bounded traversal/output, no symlink following |
+| `edit_file` | sensitive | Replaces one exact, unique text occurrence in an existing UTF-8 file; rejects missing or ambiguous matches |
 | `http_request` | sensitive, approval every call | Calls HTTP(S) APIs (including localhost) with a method, headers and optional UTF-8 body. Returns status, selected headers and bounded text. No redirect following or automatic result retries |
 | `write_file` | sensitive | Writes (or appends with `append: true`) UTF-8 `content` to `path`, creating parent folders. Use `artifact: true` and a plain filename for a downloadable conversation file (no append). Up to 1,000,000 characters |
 | `write_binary_file` | sensitive | Saves binary data from exactly one of `base64` or `sourcePath` (an existing local file). Defaults to a downloadable artifact; `artifact: false` writes to an ordinary path. No append; up to 20 MiB per file |
@@ -175,6 +194,7 @@ so it can retry (bounded by the iteration limit).
 | `ask_user_for_decision` | safe | Opens a window with a `question`, optional `options` and optional `inputLabel`. Exactly two options without input show two large buttons; no options shows only the labelled input; anything else shows a radio list with the optional input |
 
 Dangerous tools need approval on every call and run **without a sandbox**; timeouts kill the process tree.
+File tools also operate without a filesystem sandbox and follow the configured approval policy.
 PowerShell output is UTF-8 and runs with `$ErrorActionPreference = 'Stop'`, so a cmdlet error cannot be
 hidden by a later successful command. Invalid timeout or working-directory argument types return errors.
 
@@ -211,6 +231,12 @@ Each call stops at 100 results by default (`maxResults`, maximum 500), 10,000 vi
 `skippedFiles`, `incomplete`, `stopReason` and `errors` distinguish an empty result from a limited or failed search.
 Filesystem errors return a failed tool result with any partial matches. Narrow the root/glob to inspect omitted files.
 The normal tool-output cap still applies when results are sent to the model.
+
+`read_file` also accepts inclusive 1-based `startLine` and `endLine` arguments. Range output includes line numbers
+and preserves line endings; it is bounded by the output and scan limits. Reads without a range retain the original behavior.
+Use `edit_file` with `path`, `oldText`, and `newText` to make an exact replacement. `oldText` must occur exactly
+once, including whitespace and original line endings; `newText` can be empty to delete it. Files and edited
+results are limited to 1,000,000 bytes. This is text replacement, not a semantic refactoring operation.
 
 ### HTTP API requests
 

@@ -55,13 +55,19 @@ import net.talaatharb.harness.ui.DialogApprovalGateway;
 public class AppModule extends AbstractModule {
     private static final Logger LOG = LoggerFactory.getLogger(AppModule.class);
     private final Path settingsPath;
+    private final ProfileManager profiles;
 
     public AppModule() {
         this(defaultSettingsPath());
     }
 
     public AppModule(Path settingsPath) {
+        this(settingsPath, new ProfileManager(settingsPath));
+    }
+
+    public AppModule(Path settingsPath, ProfileManager profiles) {
         this.settingsPath = settingsPath;
+        this.profiles = profiles;
     }
 
     public static Path defaultSettingsPath() {
@@ -75,6 +81,7 @@ public class AppModule extends AbstractModule {
     @Override
     protected void configure() {
         bind(Path.class).annotatedWith(Names.named(SettingsStore.SETTINGS_PATH)).toInstance(settingsPath);
+        bind(ProfileManager.class).toInstance(profiles);
 
         bindModelProviders();
 
@@ -85,6 +92,7 @@ public class AppModule extends AbstractModule {
         tools.addBinding().to(net.talaatharb.harness.tools.builtin.FileDiscoveryTool.class);
         tools.addBinding().to(net.talaatharb.harness.tools.builtin.HttpRequestTool.class);
         tools.addBinding().to(net.talaatharb.harness.tools.builtin.WriteFileTool.class);
+        tools.addBinding().to(net.talaatharb.harness.tools.builtin.EditFileTool.class);
         tools.addBinding().to(net.talaatharb.harness.tools.builtin.WriteBinaryFileTool.class);
         tools.addBinding().to(net.talaatharb.harness.tools.builtin.RunNativeShellTool.class);
         tools.addBinding().to(net.talaatharb.harness.tools.builtin.RunPythonCodeTool.class);

@@ -9,6 +9,7 @@ import java.util.Locale;
 public final class MarkdownText {
     public static final String INLINE_MATH = "latex-inline:";
     public static final String DISPLAY_MATH = "latex-display:";
+    public static final String MERMAID = "mermaid-diagram:";
 
     private MarkdownText() {
     }
@@ -19,7 +20,86 @@ public final class MarkdownText {
      * breaks (Markdown would join them, which breaks poems and plain-text answers). Code is left untouched.
      */
     public static String prepare(String text) {
-        return keepLineBreaks(convertMath(text));
+        return keepLineBreaks(convertMath(convertMermaid(text)));
+    }
+
+    /** Converts complete top-level Mermaid fences to local image tokens, leaving other code fences intact. */
+    public static String convertMermaid(String text) {
+        if (text == null || text.isEmpty()) {
+            return "";
+        }
+        String[] lines = text.replace("\r\n", "\n").replace('\r', '\n').split("\n", -1);
+        StringBuilder out = new StringBuilder(text.length());
+        String fence = null;
+        int fenceLength = 0;
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            String stripped = line.stripLeading();
+            int indent = line.length() - stripped.length();
+            char marker = stripped.isEmpty() ? '\0' : stripped.charAt(0);
+            int run = 0;
+            if (indent <= 3 && (marker == '`' || marker == '~')) {
+                while (run < stripped.length() && stripped.charAt(run) == marker) {
+                    run++;
+                }
+            }
+            if (fence == null && run >= 3) {
+                String info = stripped.substring(run).strip();
+                if (info.equalsIgnoreCase("mermaid")) {
+                    int close = i + 1;
+                    while (close < lines.length && !isClosingFence(lines[close], marker, run)) {
+                        close++;
+                    }
+                    if (close < lines.length) {
+                        String source = String.join("\n", java.util.Arrays.copyOfRange(lines, i + 1, close));
+                        String encoded = Base64.getUrlEncoder().withoutPadding()
+                                .encodeToString(source.getBytes(StandardCharsets.UTF_8));
+                        out.append("![Mermaid diagram](").append(MERMAID).append(encoded).append(")");
+                        i = close;
+                    } else {
+                        fence = String.valueOf(marker);
+                        fenceLength = run;
+                        out.append(line);
+                    }
+                } else {
+                    fence = String.valueOf(marker);
+                    fenceLength = run;
+                    out.append(line);
+                }
+            } else {
+                if (fence != null && isClosingFence(line, fence.charAt(0), fenceLength)) {
+                    fence = null;
+                }
+                out.append(line);
+            }
+            if (i + 1 < lines.length) {
+                out.append('\n');
+            }
+        }
+        return out.toString();
+    }
+
+    private static boolean isClosingFence(String line, char marker, int minimum) {
+        String stripped = line.stripLeading();
+        if (line.length() - stripped.length() > 3) {
+            return false;
+        }
+        int run = 0;
+        while (run < stripped.length() && stripped.charAt(run) == marker) {
+            run++;
+        }
+        return run >= minimum && stripped.substring(run).isBlank();
+    }
+
+    public static String mermaidSource(String url) {
+        if (url == null || !url.startsWith(MERMAID)) {
+            return null;
+        }
+        try {
+            return new String(Base64.getUrlDecoder().decode(url.substring(MERMAID.length())), StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     /** Replaces math outside code with {@code ![math](latex-inline:BASE64)} / {@code latex-display:} images. */

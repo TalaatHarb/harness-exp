@@ -108,6 +108,89 @@ class UiSmokeTest {
     }
 
     @Test
+    void profileDialogCreatesAndSelectsForNextLaunch() throws Exception {
+        var profiles = new net.talaatharb.harness.config.ProfileManager(temp.resolve("settings.json"));
+        profiles.initialize();
+        fx(() -> {
+            try {
+                var dialog = ProfilesWindow.dialog(null, profiles);
+                dialog.show();
+                Parent content = dialog.getDialogPane();
+                var name = (TextField) byId(content, "newProfileName");
+                var create = (Button) byId(content, "createProfile");
+                name.setText("../bad");
+                create.fire();
+                assertTrue(((Label) byId(content, "profileError")).getText().contains("Could not create"));
+                name.setText("Project");
+                create.fire();
+                assertEquals("project", ((javafx.scene.control.ComboBox<?>) byId(content, "profileChoice")).getValue());
+                ((Button) byId(content, "selectProfile")).fire();
+                assertEquals("project", profiles.selected());
+                assertEquals("default", profiles.running());
+                dialog.close();
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+        });
+    }
+
+    @Test
+    void mainWindowDisplaysTheRunningProfile() throws Exception {
+        var profiles = new net.talaatharb.harness.config.ProfileManager(temp.resolve("settings.json"));
+        profiles.initialize();
+        profiles.select("coding");
+        profiles.initialize();
+        var injector = com.google.inject.Guice.createInjector(
+                new net.talaatharb.harness.config.AppModule(profiles.runningSettingsPath(), profiles) {
+                    @Override
+                    protected void bindModelProviders() {
+                        com.google.inject.multibindings.Multibinder.newSetBinder(
+                                binder(), net.talaatharb.harness.llm.ModelProvider.class)
+                                .addBinding().toInstance(new net.talaatharb.harness.llm.ModelProvider() {
+                                    public String id() { return "ollama"; }
+                                    public String displayName() { return "Test"; }
+                                    public boolean ping(net.talaatharb.harness.llm.ModelSettings s) { return true; }
+                                    public List<String> listModels(net.talaatharb.harness.llm.ModelSettings s) {
+                                        return List.of("test");
+                                    }
+                                    public net.talaatharb.harness.llm.ModelReply chat(
+                                            net.talaatharb.harness.llm.ModelSettings s,
+                                            net.talaatharb.harness.llm.ModelRequest r,
+                                            java.util.function.Consumer<String> sink) {
+                                        throw new UnsupportedOperationException();
+                                    }
+                                });
+                    }
+                });
+        try {
+            injector.getInstance(net.talaatharb.harness.history.ConversationStore.class)
+                    .save(net.talaatharb.harness.history.ConversationRecord.create());
+            fx(() -> {
+                var loader = new javafx.fxml.FXMLLoader(MainController.class.getResource("main.fxml"));
+                loader.setControllerFactory(injector::getInstance);
+                try {
+                    Parent root = loader.load();
+                    assertEquals("Profile: coding", ((Button) byId(root, "profilesButton")).getText());
+                    new javafx.scene.Scene(root, 980, 720);
+                    root.applyCss();
+                    root.layout();
+                    var bar = (javafx.scene.layout.HBox) root.lookup(".top-bar");
+                    assertTrue(bar.getChildren().stream().allMatch(n -> n.getBoundsInParent().getMaxX() <= 980),
+                            "Main toolbar controls must fit in the initial window");
+                    ((MainController) loader.getController()).shutdown();
+                } catch (java.io.IOException e) {
+                    throw new java.io.UncheckedIOException(e);
+                }
+            });
+        } finally {
+            injector.getInstance(net.talaatharb.harness.tools.mcp.McpClientManager.class).close();
+            injector.getInstance(net.talaatharb.harness.memory.MemoryService.class).close();
+            injector.getInstance(net.talaatharb.harness.rag.RagService.class).close();
+            injector.getInstance(net.talaatharb.harness.history.ConversationStore.class).close();
+        }
+    }
+
+    @Test
     void allSettingsSectionsLoadAndNewControlsApply() throws Exception {
         var injector = com.google.inject.Guice.createInjector(
                 new net.talaatharb.harness.config.AppModule(temp.resolve("settings.json")));
@@ -404,6 +487,90 @@ class UiSmokeTest {
             assertTrue(nodes(rawView.root()).stream().filter(Button.class::isInstance)
                     .noneMatch(b -> ((Button) b).getText().equals("Raw")));
         });
+    }
+
+    @Test
+    void rendersMermaidLocallyAndShowsSourceWhenInvalid() throws Exception {
+        CountDownLatch rendered = new CountDownLatch(1);
+        CountDownLatch invalid = new CountDownLatch(1);
+        List<Node> retained = new ArrayList<>();
+        fx(() -> {
+            ChatMarkdownView markdown = new ChatMarkdownView("```mermaid\nflowchart LR\nA --> B\n```",
+                    new javafx.beans.property.SimpleBooleanProperty(false), s -> {});
+            VBoxProbe.watch(markdown, rendered, "rendered");
+            Node bad = MermaidView.create("not a valid diagram");
+            VBoxProbe.watch(bad, invalid, "invalid");
+            retained.add(markdown);
+            retained.add(bad);
+        });
+        assertTrue(rendered.await(20, TimeUnit.SECONDS), "Mermaid diagram did not render");
+        assertTrue(invalid.await(20, TimeUnit.SECONDS), "Invalid Mermaid did not report an error");
+        assertEquals(2, retained.size());
+    }
+
+    @Test
+    void mermaidWebViewBlocksNetworkRequests() throws Exception {
+        var requests = new java.util.concurrent.atomic.AtomicInteger();
+        var server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            requests.incrementAndGet();
+            exchange.sendResponseHeaders(200, -1);
+            exchange.close();
+        });
+        server.start();
+        try {
+            CountDownLatch blocked = new CountDownLatch(1);
+            java.util.concurrent.atomic.AtomicReference<Node> retained = new java.util.concurrent.atomic.AtomicReference<>();
+            fx(() -> {
+                var box = (javafx.scene.layout.VBox) MermaidView.create("sequenceDiagram\nAlice->>Bob: Hello");
+                retained.set(box);
+                box.getChildren().addListener((javafx.collections.ListChangeListener<Node>) change -> {
+                    var view = box.getChildren().stream().filter(javafx.scene.web.WebView.class::isInstance)
+                            .map(javafx.scene.web.WebView.class::cast).findFirst();
+                    if (view.isPresent()) {
+                        var engine = view.get().getEngine();
+                        engine.executeScript("window.cspTest='pending'; fetch('http://127.0.0.1:"
+                                + server.getAddress().getPort() + "/').then(()=>window.cspTest='allowed')"
+                                + ".catch(()=>window.cspTest='blocked')");
+                        javafx.animation.Timeline timer = new javafx.animation.Timeline();
+                        timer.getKeyFrames().add(new javafx.animation.KeyFrame(javafx.util.Duration.millis(100), e -> {
+                            if ("blocked".equals(engine.executeScript("window.cspTest"))) {
+                                timer.stop();
+                                blocked.countDown();
+                            }
+                        }));
+                        timer.setCycleCount(50);
+                        timer.play();
+                    }
+                });
+            });
+            assertTrue(blocked.await(20, TimeUnit.SECONDS), "WebView did not block the network request");
+            assertNotNull(retained.get());
+            assertEquals(0, requests.get());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    private static class VBoxProbe {
+        static void watch(Node root, CountDownLatch done, String expected) {
+            javafx.scene.layout.VBox box = (javafx.scene.layout.VBox) nodes(root).stream()
+                    .filter(n -> n instanceof javafx.scene.layout.VBox v
+                            && v.getChildren().stream().anyMatch(TitledPane.class::isInstance))
+                    .findFirst().orElseThrow();
+            box.getChildren().addListener((javafx.collections.ListChangeListener<Node>) change -> {
+                if (expected.equals("rendered") && box.getChildren().stream()
+                        .anyMatch(javafx.scene.web.WebView.class::isInstance)) {
+                    done.countDown();
+                }
+            });
+            box.getChildren().stream().filter(Label.class::isInstance).map(Label.class::cast).forEach(label ->
+                    label.textProperty().addListener((obs, old, value) -> {
+                        if (expected.equals("invalid") && value.contains("Could not render")) {
+                            done.countDown();
+                        }
+                    }));
+        }
     }
 
     private static String texts(Node root) {

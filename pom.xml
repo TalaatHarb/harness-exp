@@ -44,6 +44,23 @@
             <artifactId>javafx-media</artifactId>
             <version>${javafx.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-web</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
+        <!-- Bundled locally; never loaded from a CDN at runtime. -->
+        <dependency>
+            <groupId>org.webjars.npm</groupId>
+            <artifactId>mermaid</artifactId>
+            <version>11.17.2</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
 
         <!-- Markdown rendering of replies (needs Java 25 / JavaFX 25) -->
         <dependency>

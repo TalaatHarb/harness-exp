@@ -66,6 +66,10 @@ class ChatMarkdownView extends MarkdownView {
 
     @Override
     public Node generateImage(String url) {
+        String diagram = MarkdownText.mermaidSource(url);
+        if (diagram != null) {
+            return MermaidView.create(diagram);
+        }
         String tex = MarkdownText.mathSource(url);
         if (tex != null) {
             return LatexRenderer.render(tex, url.startsWith(MarkdownText.DISPLAY_MATH));

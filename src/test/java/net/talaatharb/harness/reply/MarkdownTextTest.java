@@ -8,6 +8,20 @@ import org.junit.jupiter.api.Test;
 
 class MarkdownTextTest {
     @Test
+    void convertsOnlyCompleteMermaidFencesOutsideOtherCode() {
+        String source = "flowchart LR\n  A --> B";
+        String rendered = MarkdownText.prepare("Before\n```mermaid\n" + source + "\n```\nAfter");
+        String url = rendered.substring(rendered.indexOf("](") + 2, rendered.indexOf(")", rendered.indexOf("](")));
+        assertEquals(source, MarkdownText.mermaidSource(url));
+        assertTrue(rendered.contains("Before"));
+        assertTrue(rendered.endsWith("After"));
+        String nested = "````text\n```mermaid\nA-->B\n```\n````";
+        assertEquals(nested, MarkdownText.convertMermaid(nested));
+        String unclosed = "```mermaid\nA-->B";
+        assertEquals(unclosed, MarkdownText.convertMermaid(unclosed));
+        assertNull(MarkdownText.mermaidSource("https://example.com/image"));
+    }
+    @Test
     void keepsSingleLineBreaksOutsideCodeAndTables() {
         assertEquals("An old pond  \nA frog jumps in  \nSplash", MarkdownText.prepare("An old pond\nA frog jumps in\nSplash"));
         assertEquals("a\n\nb", MarkdownText.prepare("a\n\nb"));

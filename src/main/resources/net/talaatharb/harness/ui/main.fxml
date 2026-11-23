@@ -26,6 +26,9 @@
                 <tooltip><Tooltip text="Show / hide conversation history"/></tooltip>
             </ToggleButton>
             <Label text="Harness" styleClass="app-title"/>
+            <Button fx:id="profilesButton" text="Profile" maxWidth="145" onAction="#onProfiles">
+                <tooltip><Tooltip text="Create a profile or choose one for the next launch"/></tooltip>
+            </Button>
             <ComboBox fx:id="modelCombo" editable="true" prefWidth="240" promptText="model">
                 <tooltip><Tooltip text="Model used for the next message"/></tooltip>
             </ComboBox>

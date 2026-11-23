@@ -51,6 +51,35 @@ class SystemToolsTest {
     }
 
     @Test
+    void editsOnlyOneExactMatchAndPreservesLineEndings() throws Exception {
+        Path file = temp.resolve("source.txt");
+        Files.writeString(file, "first\r\nhello café\r\nlast\r\n");
+        EditFileTool tool = new EditFileTool();
+        assertEquals(RiskLevel.SENSITIVE, tool.risk());
+        assertTrue(tool.execute(Map.of("path", file.toString(), "oldText", "hello café", "newText", "goodbye")).success());
+        assertEquals("first\r\ngoodbye\r\nlast\r\n", Files.readString(file));
+        assertFalse(tool.execute(Map.of("path", file.toString(), "oldText", "missing", "newText", "")).success());
+        assertFalse(tool.execute(Map.of("path", file.toString(), "oldText", "\r\n", "newText", "")).success());
+        assertEquals("first\r\ngoodbye\r\nlast\r\n", Files.readString(file));
+        assertTrue(tool.execute(Map.of("path", file.toString(), "oldText", "goodbye\r\n", "newText", "")).success());
+        assertEquals("first\r\nlast\r\n", Files.readString(file));
+        Files.write(file, new byte[] {(byte) 0xff});
+        assertFalse(tool.execute(Map.of("path", file.toString(), "oldText", "x", "newText", "y")).success());
+    }
+
+    @Test
+    void readsSelectedLinesAndRejectsInvalidRanges() throws Exception {
+        Path file = temp.resolve("lines.txt");
+        Files.writeString(file, "one\r\ntwo\r\nthree\nfour");
+        ReadFileTool tool = new ReadFileTool();
+        assertEquals("2: two\r\n3: three\n", tool.execute(Map.of("path", file.toString(),
+                "startLine", 2, "endLine", 3)).output());
+        assertFalse(tool.execute(Map.of("path", file.toString(), "startLine", 3, "endLine", 2)).success());
+        assertFalse(tool.execute(Map.of("path", file.toString(), "startLine", 0)).success());
+        assertEquals("one\r\ntwo\r\nthree\nfour", tool.execute(Map.of("path", file.toString())).output());
+    }
+
+    @Test
     void shellAndPythonAreDangerousAndRun() throws Exception {
         RunNativeShellTool shell = new RunNativeShellTool();
         RunPythonCodeTool python = new RunPythonCodeTool();

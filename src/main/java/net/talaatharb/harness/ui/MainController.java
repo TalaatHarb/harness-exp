@@ -57,6 +57,7 @@ import net.talaatharb.harness.agent.AgentLoop;
 import net.talaatharb.harness.agent.AgentRunResult;
 import net.talaatharb.harness.agent.Conversation;
 import net.talaatharb.harness.config.HarnessSettings;
+import net.talaatharb.harness.config.ProfileManager;
 import net.talaatharb.harness.config.SettingsStore;
 import net.talaatharb.harness.context.ContextSettings;
 import net.talaatharb.harness.history.ConversationRecord;
@@ -85,6 +86,7 @@ public class MainController {
 
     private final AgentLoop agentLoop;
     private final SettingsStore store;
+    private final ProfileManager profiles;
     private final ModelProviderRegistry providers;
     private final SettingsWindow settingsWindow;
     private final ConversationStore history;
@@ -115,6 +117,7 @@ public class MainController {
     private VoiceInput voice;
 
     @FXML private ComboBox<String> modelCombo;
+    @FXML private Button profilesButton;
     @FXML private Label statusLabel;
     @FXML private ScrollPane scrollPane;
     @FXML private VBox messagesBox;
@@ -155,12 +158,13 @@ public class MainController {
     @Inject
     public MainController(AgentLoop agentLoop, SettingsStore store, ModelProviderRegistry providers,
             SettingsWindow settingsWindow, ConversationStore history, SpeechToText speech, RagService rag,
-            SiteCrawler crawler) {
+            SiteCrawler crawler, ProfileManager profiles) {
         this.speech = speech;
         this.rag = rag;
         this.crawler = crawler;
         this.agentLoop = agentLoop;
         this.store = store;
+        this.profiles = profiles;
         this.providers = providers;
         this.settingsWindow = settingsWindow;
         this.history = history;
@@ -168,6 +172,10 @@ public class MainController {
 
     @FXML
     private void initialize() {
+        profilesButton.setText("Profile: " + profiles.running());
+        profilesButton.setAccessibleText("Current profile: " + profiles.running());
+        profilesButton.setTooltip(new javafx.scene.control.Tooltip(
+                "Current profile: " + profiles.running() + ". Create or choose a profile for the next launch."));
         modelCombo.setValue(store.current().model.model);
         modelCombo.setOnAction(e -> onModelChosen());
         inputArea.setOnKeyPressed(e -> {
@@ -324,6 +332,11 @@ public class MainController {
     @FXML
     private void onOpenSettings() {
         settingsWindow.show(messagesBox.getScene().getWindow());
+    }
+
+    @FXML
+    private void onProfiles() {
+        ProfilesWindow.show(messagesBox.getScene().getWindow(), profiles);
     }
 
     @FXML
