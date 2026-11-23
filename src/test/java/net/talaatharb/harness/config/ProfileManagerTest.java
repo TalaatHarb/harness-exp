@@ -34,6 +34,22 @@ class ProfileManagerTest {
         assertTrue(learning.tools.disabledTools.contains("edit_file"));
         assertFalse(coding.tools.disabledTools.contains("edit_file"));
         assertTrue(coding.systemPrompt.template.contains("software engineering"));
+        for (HarnessSettings profile : List.of(new SettingsStore(legacy).current(), learning, coding)) {
+            assertTrue(profile.systemPrompt.template.contains("```mermaid"), "missing diagram guidance");
+        }
+        var learningSkills = new net.talaatharb.harness.skills.SkillRepository(
+                manager.settingsPath("learning").resolveSibling("skills"), null);
+        var codingSkills = new net.talaatharb.harness.skills.SkillRepository(
+                manager.settingsPath("coding").resolveSibling("skills"), null);
+        var tutor = learningSkills.find("interactive-tutor").orElseThrow();
+        assertTrue(tutor.appliesTo("teach me recursion"), "tutor should be always on");
+        assertTrue(tutor.instructions.contains("ask_user_for_decision"));
+        assertTrue(learningSkills.find("summarizer").isPresent(), "general defaults are kept");
+        assertTrue(learningSkills.find("refactoring").isEmpty());
+        assertTrue(codingSkills.find("feature-development").orElseThrow().appliesTo("Implement CSV export"));
+        assertTrue(codingSkills.find("refactoring").orElseThrow().appliesTo("Please refactor the parser"));
+        assertTrue(codingSkills.find("interactive-tutor").isEmpty());
+        assertFalse(Files.exists(legacy.resolveSibling("skills")), "default profile skills are seeded lazily");
         assertEquals("", learning.model.apiKey);
 
         manager.select("learning");

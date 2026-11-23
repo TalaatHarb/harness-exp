@@ -32,6 +32,8 @@ separate **⚙ Harness** settings window, one tab per harness concern.
   - **Diagrams**: fenced `mermaid` blocks render locally with bundled Mermaid in a network-restricted WebView.
     A source disclosure is available for every diagram; invalid or oversized diagrams display their source.
     Mermaid configuration directives and frontmatter are not supported.
+    **⤢ Expand** opens a rendered diagram in its own resizable window with zoom controls and
+    **Save PNG…** (2× resolution) / **Save SVG…** export.
   - Images are not fetched until you click **Load image** or **Allow all images**, because a remote image URL
     chosen by the model can leak data.
   - Links open in your browser only after you confirm them; only `http`, `https` and `mailto` links can be opened.
@@ -49,6 +51,14 @@ Use **Profile** in the main window to create profiles or choose one for the next
 to switch; the currently running profile and its open conversations remain unchanged until then. The initial profiles
 are **default**, **learning**, and **coding**. Learning and Coding have starter prompts; Learning initially disables
 file editing, shell, Python and dynamic-tool creation. Adjust each profile in **⚙ Harness**.
+
+Built-in profiles also start with their own skills (plus the general defaults), which can be edited in **⚙ Harness**:
+- **Learning — Interactive tutor** (always on): teaches through a loop of multiple-choice questions asked with
+  `ask_user_for_decision`, feedback on each answer, the next adaptive question, and periodic progress summaries.
+- **Coding — Feature development** and **Refactoring** (triggered by words such as "implement" or "refactor"):
+  starter workflows for understanding, clarifying, planning, editing and verifying changes.
+
+![The Learning profile's tutor asking a multiple-choice question about the Prime Number Theorem](img/LearningProfile.PNG)
 
 The Default profile keeps the existing `~/.harness-exp/settings.json` and all existing data in place; nothing is
 migrated or overwritten. Other profiles have their own `~/.harness-exp/profiles/<name>/settings.json` and, by default,
@@ -72,7 +82,7 @@ that file is the Default profile and its sibling profile folder holds the others
 | Agent loop | Iteration/tool-call/duration/repeat/error limits (clamped by hard ceilings in `AgentLoopLimits`) and `HookPoint`s | `agent` |
 | Guardrails | Input/tool-call/output guardrails: length limit, blocked terms, secret redaction | `guardrails` |
 | Human approval | Never / risky tools / all tools, always-allowed list, timeout (denies and closes the dialog). Tools that run agent-written code (`create_tool`, dynamic tools), rewrite its instructions (`create_skill`), make API requests (`http_request`), and `DANGEROUS` tools need approval on **every** call, whatever the policy, and can't be "always allowed" | `approval` |
-| Reply | Markdown or raw text, plus **agentic UI**: the model emits ```` ```ui ```` JSON blocks rendered as live JavaFX components; image permission and tool trace, thinking, sent-context and run-timeline toggles | `reply` |
+| Reply | Markdown or raw text (default: text rendered as Markdown), plus optional **agentic UI**: the model emits ```` ```ui ```` JSON blocks rendered as live JavaFX components; image permission and tool trace, thinking, sent-context and run-timeline toggles | `reply` |
 | Speech | Voice input on/off, send right after dictation, transcribe audio attachments, language, max recording length, model download | `speech` |
 | Storage | External locations for the skills folder, dynamic tools folder, MapDB history file, local models folder, memory folder, memory DB and RAG index folder (browse or type; blank = default). Applies after restart | `storage` |
 
@@ -548,11 +558,11 @@ and failure/skip reasons rather than claiming successful extraction.
 **Configuration** (Harness → Tools & MCP → *Web search*, stored as `tools.web` in `settings.json`):
 
 - **Provider**: one choice for both tools. Only free providers are implemented:
-  - `duckduckgo` (default): the key-less HTML endpoint. It is unofficial; when it answers with a rate limit or bot
+  - `duckduckgo`: the key-less HTML endpoint. It is unofficial; when it answers with a rate limit or bot
     challenge the search fails with a message and is not retried or evaded.
   - `searxng`: a self-hosted [SearXNG](https://docs.searxng.org/) instance. Set its **SearXNG URL** (default
     `http://localhost:8080`) and enable `json` under `search.formats` in its `settings.yml`.
-  - `wikipedia`: the official MediaWiki API (no key); set the language code. Only searches Wikipedia.
+  - `wikipedia` (default): the official MediaWiki API (no key); set the language code. Only searches Wikipedia.
     Search-result revision timestamps are modification dates, not publication dates, and are not labelled
     as "Published" in the output.
 - **Limits**: results requested, pages read per call (`maxPages`, 1-10), fetch timeout, max page size, characters per

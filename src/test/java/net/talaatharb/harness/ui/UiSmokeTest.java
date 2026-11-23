@@ -552,6 +552,73 @@ class UiSmokeTest {
         }
     }
 
+    @Test
+    void expandsMermaidDiagramAndExportsSvgAndPng(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir)
+            throws Exception {
+        CountDownLatch rendered = new CountDownLatch(1);
+        var box = new java.util.concurrent.atomic.AtomicReference<javafx.scene.layout.VBox>();
+        fx(() -> {
+            var created = (javafx.scene.layout.VBox) MermaidView.create("flowchart LR\nA[Start] --> B[End]");
+            box.set(created);
+            created.getChildren().addListener((javafx.collections.ListChangeListener<Node>) change -> {
+                if (created.getChildren().stream().anyMatch(javafx.scene.web.WebView.class::isInstance)) {
+                    rendered.countDown();
+                }
+            });
+        });
+        assertTrue(rendered.await(20, TimeUnit.SECONDS), "Mermaid diagram did not render");
+
+        var stage = new java.util.concurrent.atomic.AtomicReference<javafx.stage.Stage>();
+        var diagram = new java.util.concurrent.atomic.AtomicReference<MermaidWindow.Diagram>();
+        fx(() -> {
+            Button expand = (Button) byId(box.get(), "mermaidExpand");
+            int before = javafx.stage.Window.getWindows().size();
+            expand.fire();
+            assertEquals(before + 1, javafx.stage.Window.getWindows().size());
+            stage.set((javafx.stage.Stage) javafx.stage.Window.getWindows().get(before));
+            Parent root = stage.get().getScene().getRoot();
+            byId(root, "mermaidSavePng");
+            byId(root, "mermaidSaveSvg");
+            assertTrue(nodes(root).stream().anyMatch(javafx.scene.web.WebView.class::isInstance));
+        });
+
+        fx(() -> diagram.set(capture(box.get())));
+        java.nio.file.Path svg = dir.resolve("diagram.svg");
+        MermaidWindow.writeSvg(diagram.get(), svg);
+        String svgText = java.nio.file.Files.readString(svg);
+        assertTrue(svgText.startsWith("<?xml"));
+        assertTrue(svgText.contains("Start") && svgText.contains("End"));
+        javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(svg.toFile());
+
+        var bytes = new java.util.concurrent.atomic.AtomicReference<byte[]>();
+        var failure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+        CountDownLatch exported = new CountDownLatch(1);
+        fx(() -> MermaidWindow.renderPng(diagram.get(), 2, png -> {
+            bytes.set(png);
+            exported.countDown();
+        }, ex -> {
+            failure.set(ex);
+            exported.countDown();
+        }));
+        assertTrue(exported.await(20, TimeUnit.SECONDS), "PNG export did not finish");
+        assertNull(failure.get(), () -> "PNG export failed: " + failure.get());
+        var written = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(bytes.get()));
+        assertEquals((int) Math.ceil(diagram.get().width() * 2), written.getWidth());
+        boolean drawn = false;
+        for (int y = 0; y < written.getHeight() && !drawn; y++) {
+            for (int x = 0; x < written.getWidth() && !drawn; x++) {
+                drawn = (written.getRGB(x, y) & 0xFFFFFF) != 0xFFFFFF;
+            }
+        }
+        assertTrue(drawn, "Exported PNG is blank");
+        fx(() -> stage.get().close());
+    }
+
+    private static MermaidWindow.Diagram capture(javafx.scene.layout.VBox box) {
+        return MermaidView.capture((javafx.scene.web.WebView) box.getChildren().stream()
+                .filter(javafx.scene.web.WebView.class::isInstance).findFirst().orElseThrow());
+    }
+
     private static class VBoxProbe {
         static void watch(Node root, CountDownLatch done, String expected) {
             javafx.scene.layout.VBox box = (javafx.scene.layout.VBox) nodes(root).stream()

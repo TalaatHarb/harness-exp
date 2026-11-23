@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -35,6 +36,10 @@ public final class SkillFiles {
     public static final String FILE_NAME = "SKILL.md";
     static final String BUNDLED_ROOT = "/net/talaatharb/harness/skills/defaults/";
     static final List<String> BUNDLED_IDS = List.of("code-reviewer", "summarizer");
+    static final String PROFILE_ROOT = "/net/talaatharb/harness/skills/profiles/";
+    static final Map<String, List<String>> PROFILE_IDS = Map.of(
+            "learning", List.of("interactive-tutor"),
+            "coding", List.of("feature-development", "refactoring"));
     private static final String FENCE = "---";
     private static final int MAX_ID_CHARS = 60;
     private static final Set<String> WINDOWS_RESERVED = Set.of("con", "prn", "aux", "nul", "com1", "com2", "com3",
@@ -150,9 +155,23 @@ public final class SkillFiles {
     }
 
     static List<SkillDefinition> bundledDefaults() {
+        return bundled(BUNDLED_ROOT, BUNDLED_IDS);
+    }
+
+    /**
+     * The skills a new built-in profile starts with: the bundled defaults plus that profile's own skills
+     * (e.g. the interactive tutor for {@code learning}).
+     */
+    public static List<SkillDefinition> bundledForProfile(String profile) {
+        List<SkillDefinition> skills = new ArrayList<>(bundledDefaults());
+        skills.addAll(bundled(PROFILE_ROOT + profile + "/", PROFILE_IDS.getOrDefault(profile, List.of())));
+        return skills;
+    }
+
+    private static List<SkillDefinition> bundled(String root, List<String> ids) {
         List<SkillDefinition> skills = new ArrayList<>();
-        for (String id : BUNDLED_IDS) {
-            try (InputStream in = SkillFiles.class.getResourceAsStream(BUNDLED_ROOT + id + "/" + FILE_NAME)) {
+        for (String id : ids) {
+            try (InputStream in = SkillFiles.class.getResourceAsStream(root + id + "/" + FILE_NAME)) {
                 if (in == null) {
                     throw new IllegalStateException("Missing bundled skill " + id);
                 }

@@ -7,18 +7,27 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
+import net.talaatharb.harness.prompt.SystemPromptSettings;
+import net.talaatharb.harness.skills.SkillDefinition;
+import net.talaatharb.harness.skills.SkillFiles;
+
 /** Persistent profile selection. The legacy settings file remains the Default profile. */
 public final class ProfileManager {
     public static final String DEFAULT = "default";
+    private static final Logger LOG = LoggerFactory.getLogger(ProfileManager.class);
     private final Path defaultSettings;
     private final Path profilesDir;
     private final Path selectionFile;
@@ -154,7 +163,8 @@ public final class ProfileManager {
                     Ask about their goals and prior knowledge, adapt explanations to their answers, and offer
                     practice and constructive feedback. Do not assume an answer is understood without checking.
                     Today is {{date}} and the local time is {{time}}. You are served by model {{model}}.
-                    Be accurate and acknowledge uncertainty.""";
+                    Be accurate and acknowledge uncertainty.
+                    """ + SystemPromptSettings.DIAGRAM_GUIDANCE;
             settings.tools.disabledTools.addAll(Set.of("edit_file", "run_native_shell", "run_python_code",
                     "create_tool"));
         } else {
@@ -163,7 +173,8 @@ public final class ProfileManager {
                     Make focused changes, preserve existing behavior, and use appropriate tests to verify them.
                     Ask for clarification when requirements or destructive actions are uncertain.
                     Today is {{date}} and the local time is {{time}}. You are served by model {{model}}.
-                    Be concise and accurate, and report failures and uncertainty.""";
+                    Be concise and accurate, and report failures and uncertainty.
+                    """ + SystemPromptSettings.DIAGRAM_GUIDANCE;
         }
         try {
             writeNewSettings(dir.resolve("settings.json"), settings);
@@ -174,6 +185,30 @@ public final class ProfileManager {
                 e.addSuppressed(cleanup);
             }
             throw e;
+        }
+        seedSkills(id, dir.resolve(StoragePaths.SKILLS));
+    }
+
+    /**
+     * Gives a new built-in profile its bundled skills. On failure the folder is removed so the skill repository seeds
+     * the general defaults instead; the profile itself stays usable.
+     */
+    private void seedSkills(String id, Path skillsDir) {
+        try {
+            for (SkillDefinition skill : SkillFiles.bundledForProfile(id)) {
+                Path file = skillsDir.resolve(skill.id).resolve(SkillFiles.FILE_NAME);
+                Files.createDirectories(file.getParent());
+                Files.writeString(file, SkillFiles.format(skill), StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
+            }
+        } catch (IOException | RuntimeException e) {
+            LOG.warn("Could not seed skills for profile '{}'", id, e);
+            try (var paths = Files.walk(skillsDir)) {
+                for (Path p : paths.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                    Files.deleteIfExists(p);
+                }
+            } catch (IOException | RuntimeException cleanup) {
+                LOG.warn("Could not remove partially seeded skills in {}", skillsDir, cleanup);
+            }
         }
     }
 

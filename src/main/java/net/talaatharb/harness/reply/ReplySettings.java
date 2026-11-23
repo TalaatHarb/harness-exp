@@ -11,7 +11,7 @@ public class ReplySettings {
         AGENTIC_UI
     }
 
-    public Mode mode = Mode.AGENTIC_UI;
+    public Mode mode = Mode.TEXT;
     /** Show tool calls/results inline in the chat as compact trace lines. */
     public boolean showToolTrace = true;
     /** Show the model's thinking text (for reasoning models) when available. */

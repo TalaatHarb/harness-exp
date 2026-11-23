@@ -8,7 +8,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 /** Shared configuration of the web search tools, stored as {@code tools.web}. */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class WebSearchSettings {
-    public static final String DEFAULT_PROVIDER = "duckduckgo";
+    public static final String DEFAULT_PROVIDER = "wikipedia";
 
     /** {@link SearchProvider#id()} used by both web tools. */
     public String provider = DEFAULT_PROVIDER;
